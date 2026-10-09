@@ -15,7 +15,6 @@ import {
 } from "react"
 import { Link, useSearchParams } from "react-router"
 
-import { Logo } from "~/components/logo"
 import { MapCanvas } from "~/components/map/map-canvas"
 import type { MapMode } from "~/components/map/route-map"
 import { AccountMenu, type Account } from "~/components/shell/account-menu"
@@ -250,11 +249,8 @@ export function MapApp({
         {layout === "sidebar" && !mobile && (
           <aside className="panel z-10 m-3 flex w-[22rem] shrink-0 flex-col rounded-4xl">
             <div className="flex items-center justify-between gap-2 px-4 py-3">
-              <Logo />
-              <div className="flex items-center gap-2">
-                <ThemeSwitch />
-                {accountMenu}
-              </div>
+              {accountMenu ?? <span />}
+              <ThemeSwitch />
             </div>
             <ScrollArea className="min-h-0 flex-1 px-4 pb-4">
               <SportsRail
@@ -426,10 +422,8 @@ function HudChrome({
     <div className="pointer-events-none absolute inset-0 z-10 hidden md:flex">
       <div className="flex w-full flex-col justify-between p-4 pt-16">
         <div className="flex items-start justify-between gap-3">
-          <div className="pointer-events-auto flex flex-col gap-2">
-            <div className="panel flex items-center gap-3 rounded-4xl px-3 py-2">
-              <Logo />
-            </div>
+          <div className="pointer-events-auto flex flex-col items-start gap-2">
+            {accountMenu}
             <div className="panel rounded-4xl p-2">
               <SportsRail
                 filters={filters}
@@ -442,7 +436,6 @@ function HudChrome({
           <div className="pointer-events-auto flex items-center gap-2">
             <ModeToggle mode={mode} onMode={onMode} />
             <ThemeSwitch />
-            {accountMenu}
           </div>
         </div>
         <div className="flex items-end justify-between gap-3">
@@ -500,15 +493,16 @@ function DockChrome({
   return (
     <div className="pointer-events-none absolute inset-0 z-10 hidden flex-col justify-between p-4 pt-16 md:flex">
       <div className="flex items-start justify-between gap-3">
-        <div className="panel pointer-events-auto flex items-center gap-3 rounded-4xl px-3 py-2">
-          <Logo />
+        <div className="pointer-events-auto flex items-center gap-2">
+          {accountMenu}
           {chips.length > 0 && (
-            <p className="text-xs text-muted-foreground">{chips.join(" · ")}</p>
+            <p className="panel rounded-4xl px-3 py-2 text-xs text-muted-foreground">
+              {chips.join(" · ")}
+            </p>
           )}
         </div>
-        <div className="pointer-events-auto flex items-center gap-2">
+        <div className="pointer-events-auto">
           <ThemeSwitch />
-          {accountMenu}
         </div>
       </div>
 
@@ -605,12 +599,9 @@ function MobileChrome({
   return (
     <div className="pointer-events-none absolute inset-0 z-10 flex flex-col justify-between p-3 md:hidden">
       <div className="flex items-start justify-between">
-        <div className="panel pointer-events-auto rounded-4xl px-3 py-2">
-          <Logo />
-        </div>
-        <div className="pointer-events-auto flex items-center gap-2">
+        <div className="pointer-events-auto">{accountMenu}</div>
+        <div className="pointer-events-auto">
           <ThemeSwitch />
-          {accountMenu}
         </div>
       </div>
       <Drawer>

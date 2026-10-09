@@ -51,7 +51,7 @@ export function AccountMenu({
           </AvatarFallback>
         </Avatar>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" sideOffset={8} className="w-64">
+      <DropdownMenuContent align="start" sideOffset={8} className="w-64">
         <DropdownMenuGroup>
           <DropdownMenuLabel className="flex flex-col gap-0.5">
             {account.name && (
