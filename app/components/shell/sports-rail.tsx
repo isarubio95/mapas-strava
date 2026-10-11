@@ -4,20 +4,22 @@ import { getSport, sportColor } from "~/lib/sports"
 import type { Theme } from "~/lib/theme"
 import { cn } from "~/lib/utils"
 
-const RAIL = ["Run", "Ride", "Walk", "Hike", "Swim", "WeightTraining"] as const
-
 export function SportsRail({
+  sports,
   filters,
   onChange,
   theme,
   orientation = "vertical",
 }: {
+  /** Sport types the user has activities of, in display order. */
+  sports: string[]
   filters: Filters
   onChange: (filters: Filters) => void
   theme: Theme
   orientation?: "vertical" | "horizontal"
 }) {
   const selected = filters.sports
+  if (!sports.length) return null
 
   const toggle = (type: string) => {
     onChange({
@@ -41,7 +43,7 @@ export function SportsRail({
         orientation === "vertical" ? "flex-col" : "flex-row flex-wrap"
       )}
     >
-      {RAIL.map((type) => {
+      {sports.map((type) => {
         const sport = getSport(type)
         const on = !selected || selected.includes(type)
         const pressed = Boolean(selected?.includes(type))

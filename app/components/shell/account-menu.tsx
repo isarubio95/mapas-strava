@@ -41,11 +41,11 @@ export function AccountMenu({
       <DropdownMenuTrigger
         aria-label="Tu cuenta"
         className={cn(
-          "panel pointer-events-auto rounded-full p-1 outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
+          "panel pointer-events-auto size-12.5 rounded-full p-1 outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
           className
         )}
       >
-        <Avatar>
+        <Avatar className="size-full">
           <AvatarFallback className="bg-primary font-medium text-primary-foreground">
             {initials(account)}
           </AvatarFallback>

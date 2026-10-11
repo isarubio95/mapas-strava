@@ -17,6 +17,18 @@ describe("createMapStyle", () => {
     expect(ids).not.toContain("place-label")
   })
 
+  it("adds city, town and village names on top when labels are on", () => {
+    const style = createMapStyle(NIGHT, { labels: true })
+    const label = style.layers.at(-1)
+    expect(label).toMatchObject({
+      id: "place-label",
+      type: "symbol",
+      "source-layer": "place",
+      filter: ["match", ["get", "class"], ["city", "town", "village"], true, false],
+      paint: { "text-color": NIGHT.label },
+    })
+  })
+
   it("uses cream land by day and teal land by night", () => {
     expect(createMapStyle(DAY).layers[0]).toMatchObject({
       paint: { "background-color": DAY.land },

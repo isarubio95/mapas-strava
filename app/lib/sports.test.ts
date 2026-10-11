@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vitest"
 
 import { adaptToTheme, hexToOklch, isHexColor } from "~/lib/color"
-import { CATEGORIES, SPORTS, getSport, sportColor } from "~/lib/sports"
+import {
+  CATEGORIES,
+  SPORTS,
+  getSport,
+  sportColor,
+  sportsByUse,
+} from "~/lib/sports"
 
 describe("sports registry", () => {
   it("covers the 56 Strava sport types once each", () => {
@@ -19,6 +25,20 @@ describe("sports registry", () => {
     const sport = getSport("UnderwaterHockey")
     expect(sport.category).toBe("otros")
     expect(sport.label).toBe("Underwater hockey")
+  })
+})
+
+describe("sportsByUse", () => {
+  it("lists each sport once, most frequent first", () => {
+    expect(sportsByUse(["Ride", "Run", "Run", "Swim", "Run", "Ride"])).toEqual([
+      "Run",
+      "Ride",
+      "Swim",
+    ])
+  })
+
+  it("is empty without activities", () => {
+    expect(sportsByUse([])).toEqual([])
   })
 })
 

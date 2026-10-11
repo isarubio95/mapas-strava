@@ -58,44 +58,6 @@ export function paletteForTheme(theme: Theme) {
   return theme === "dark" ? NIGHT : DAY
 }
 
-/** Poster themes. Ámbar follows poster.png: black ground, orange streets. */
-export const AMBER: MapPalette = {
-  land: "#100800",
-  water: "#1a0c04",
-  park: "#140a02",
-  building: "#1a0e04",
-  path: "#3a1e08",
-  roadMinor: "#5a3010",
-  roadMajor: "#8a4814",
-  roadHighway: "#e07a1a",
-  rail: "#3a220c",
-  boundary: "#6a4018",
-  label: "#f0d7a0",
-  labelHalo: "#100800",
-}
-
-export const INK: MapPalette = {
-  land: "#f7f4ee",
-  water: "#d5dbe3",
-  park: "#e7efe6",
-  building: "#efeae2",
-  path: "#d9d3c8",
-  roadMinor: "#b7b1a6",
-  roadMajor: "#6e6a62",
-  roadHighway: "#2a2824",
-  rail: "#c4beb4",
-  boundary: "#8a847a",
-  label: "#2a2824",
-  labelHalo: "#f7f4ee",
-}
-
-export const POSTER_THEMES = [
-  { id: "noche", label: "Noche", palette: NIGHT },
-  { id: "arena", label: "Arena", palette: DAY },
-  { id: "ambar", label: "Ámbar", palette: AMBER },
-  { id: "tinta", label: "Tinta", palette: INK },
-] as const
-
 export const OPENFREEMAP_ATTRIBUTION =
   '<a href="https://openfreemap.org" target="_blank" rel="noreferrer">OpenFreeMap</a> <a href="https://www.openmaptiles.org/" target="_blank" rel="noreferrer">© OpenMapTiles</a> Datos de <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a>'
 
@@ -280,29 +242,35 @@ export function createMapStyle(
       type: "symbol",
       source: SOURCE,
       "source-layer": "place",
-      filter: [
-        "match",
-        ["get", "class"],
-        ["city", "town", "village", "suburb"],
-        true,
-        false,
-      ],
+      filter: ["match", ["get", "class"], ["city", "town", "village"], true, false],
       layout: {
         "text-field": ["coalesce", ["get", "name:es"], ["get", "name"]],
         "text-font": ["Noto Sans Regular"],
+        // MapLibre allows a single zoom curve, so the class picks each stop.
         "text-size": [
-          "match",
-          ["get", "class"],
-          "city",
-          ["interpolate", ["linear"], ["zoom"], 4, 11, 12, 18],
-          ["interpolate", ["linear"], ["zoom"], 8, 10, 14, 14],
+          "interpolate",
+          ["linear"],
+          ["zoom"],
+          4,
+          ["match", ["get", "class"], "city", 11, "town", 9, 8],
+          10,
+          ["match", ["get", "class"], "city", 16, "town", 11.5, 9],
+          15,
+          ["match", ["get", "class"], "city", 19, "town", 15, 13],
         ],
         "text-max-width": 8,
+        "text-padding": 4,
+        // Cities win collisions over towns, towns over villages.
+        "symbol-sort-key": [
+          "+",
+          ["match", ["get", "class"], "city", 0, "town", 1000, 2000],
+          ["coalesce", ["get", "rank"], 999],
+        ],
       },
       paint: {
         "text-color": palette.label,
         "text-halo-color": palette.labelHalo,
-        "text-halo-width": 1.4,
+        "text-halo-width": 2,
       },
     })
   }

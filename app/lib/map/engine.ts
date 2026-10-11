@@ -17,6 +17,8 @@ export interface RouteGeometry {
   pathActivity: Uint32Array
   /** Local day number of each path, for the GPU date filter. */
   pathDay: Float32Array
+  /** Share of its route's length covered at each vertex, from 0 to 1. */
+  progress: Float32Array
   bounds: BBox | null
   /** Routes around the place most of them start: where the map opens. */
   home: BBox | null
@@ -230,6 +232,7 @@ export class RouteEngine {
       startIndices: this.startIndices.slice(),
       pathActivity: this.pathActivity.slice(),
       pathDay,
+      progress: this.vertexFraction.slice(),
       bounds,
       home: homeBounds(starts, boxes),
     }

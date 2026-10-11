@@ -1,4 +1,4 @@
-import { XIcon } from "@phosphor-icons/react"
+import { CrosshairSimpleIcon, XIcon } from "@phosphor-icons/react"
 
 import { Button } from "~/components/ui/button"
 import type { Activity } from "~/lib/activities"
@@ -11,6 +11,8 @@ export function DetailPanel({
   overlapped,
   profile,
   theme,
+  focused,
+  onFocus,
   onSelect,
   onClose,
 }: {
@@ -18,6 +20,9 @@ export function DetailPanel({
   overlapped: Activity[]
   profile: { distance: number[]; altitude: number[] } | null
   theme: Theme
+  /** Only this route is on the map. */
+  focused: boolean
+  onFocus: (focused: boolean) => void
   onSelect: (id: number) => void
   onClose: () => void
 }) {
@@ -69,14 +74,28 @@ export function DetailPanel({
         </ul>
       )}
 
-      <a
-        className="mt-4 inline-flex text-sm font-medium text-primary underline"
-        href={`https://www.strava.com/activities/${activity.id}`}
-        target="_blank"
-        rel="noreferrer"
-      >
-        View on Strava
-      </a>
+      <div className="mt-4 flex items-center justify-between gap-2">
+        <a
+          className="inline-flex text-sm font-medium text-primary underline"
+          href={`https://www.strava.com/activities/${activity.id}`}
+          target="_blank"
+          rel="noreferrer"
+        >
+          View on Strava
+        </a>
+        {activity.polyline && (
+          <Button
+            type="button"
+            size="sm"
+            variant={focused ? "default" : "outline"}
+            aria-pressed={focused}
+            onClick={() => onFocus(!focused)}
+          >
+            <CrosshairSimpleIcon data-icon="inline-start" weight="bold" />
+            Solo esta ruta
+          </Button>
+        )}
+      </div>
     </aside>
   )
 }

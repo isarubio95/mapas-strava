@@ -10,12 +10,14 @@ const engine = new RouteEngine()
 const api = {
   load(activities: Activity[]) {
     const result = engine.load(activities)
-    const { positions, startIndices, pathActivity, pathDay } = result.geometry
+    const { positions, startIndices, pathActivity, pathDay, progress } =
+      result.geometry
     return transfer(result, [
       positions.buffer,
       startIndices.buffer,
       pathActivity.buffer,
       pathDay.buffer,
+      progress.buffer,
     ])
   },
   query(filters: Filters) {

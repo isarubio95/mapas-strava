@@ -1,0 +1,97 @@
+[    1367ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=6e1fcb36:15804
+[   29747ms] [WARNING] luma.gl: Binding weightsTexture not set: Not found in shader layout. @ http://localhost:5173/node_modules/.vite/deps/get-attribute-from-layouts-BjnHwr97.js?v=6e1fcb36:277
+[   47914ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=6e1fcb36:15804
+[   51087ms] [WARNING] luma.gl: Binding weightsTexture not set: Not found in shader layout. @ http://localhost:5173/node_modules/.vite/deps/get-attribute-from-layouts-BjnHwr97.js?v=6e1fcb36:277
+[  109695ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=6e1fcb36:15804
+[  142874ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=6e1fcb36:15804
+[  166818ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=6e1fcb36:15804
+[  170509ms] [WARNING] luma.gl: Binding weightsTexture not set: Not found in shader layout. @ http://localhost:5173/node_modules/.vite/deps/get-attribute-from-layouts-BjnHwr97.js?v=6e1fcb36:277
+[  804433ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=865a47a3:15804
+[ 1253064ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=865a47a3:15804
+[ 1284632ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=865a47a3:15804
+[ 1451014ms] [ERROR] Invalid hook call. Hooks can only be called inside of the body of a function component. This could happen for one of the following reasons:
+1. You might have mismatching versions of React and the renderer (such as React DOM)
+2. You might be breaking the Rules of Hooks
+3. You might have more than one copy of React in the same app
+See https://react.dev/link/invalid-hook-call for tips about how to debug and fix this problem. @ http://localhost:5173/node_modules/.vite/deps/react.js?v=099b568b:305
+[ 1451019ms] [ERROR] Encountered a script tag while rendering React component. Scripts inside React components are never executed when rendering on the client. Consider using template tag instead (https://developer.mozilla.org/en-US/docs/Web/HTML/Element/template). @ http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=865a47a3:6614
+[ 1451063ms] [ERROR] Invalid hook call. Hooks can only be called inside of the body of a function component. This could happen for one of the following reasons:
+1. You might have mismatching versions of React and the renderer (such as React DOM)
+2. You might be breaking the Rules of Hooks
+3. You might have more than one copy of React in the same app
+See https://react.dev/link/invalid-hook-call for tips about how to debug and fix this problem. @ http://localhost:5173/node_modules/.vite/deps/react.js?v=099b568b:305
+[ 1451067ms] [ERROR] %o
+
+%s
+
+%s
+ TypeError: Cannot read properties of null (reading 'useRef')
+    at exports.useRef (http://localhost:5173/node_modules/.vite/deps/react.js?v=099b568b:766:30)
+    at useRefWithInit (http://localhost:5173/node_modules/.vite/deps/useRenderElement-DpcP9vJ4.js?v=099b568b:14:27)
+    at FastComponent (http://localhost:5173/node_modules/.vite/deps/inertValue-Xf7OcySK.js?v=099b568b:1720:20)
+    at Object.react_stack_bottom_frame (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=865a47a3:14142:12)
+    at renderWithHooks (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=865a47a3:4400:19)
+    at updateFunctionComponent (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=865a47a3:5775:16)
+    at beginWork (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=865a47a3:6391:20)
+    at runWithFiberInDEV (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=865a47a3:944:66)
+    at performUnitOfWork (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=865a47a3:9148:92)
+    at workLoopSync (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=865a47a3:9044:37) The above error occurred in the <DialogRoot> component. React will try to recreate this component tree from scratch using the error boundary you provided, RenderErrorBoundary. @ http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=865a47a3:5466
+[ 1451075ms] [ERROR] React Router caught the following error during render TypeError: Cannot read properties of null (reading 'useRef')
+    at exports.useRef (http://localhost:5173/node_modules/.vite/deps/react.js?v=099b568b:766:30)
+    at useRefWithInit (http://localhost:5173/node_modules/.vite/deps/useRenderElement-DpcP9vJ4.js?v=099b568b:14:27)
+    at FastComponent (http://localhost:5173/node_modules/.vite/deps/inertValue-Xf7OcySK.js?v=099b568b:1720:20)
+    at Object.react_stack_bottom_frame (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=865a47a3:14142:12)
+    at renderWithHooks (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=865a47a3:4400:19)
+    at updateFunctionComponent (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=865a47a3:5775:16)
+    at beginWork (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=865a47a3:6391:20)
+    at runWithFiberInDEV (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=865a47a3:944:66)
+    at performUnitOfWork (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=865a47a3:9148:92)
+    at workLoopSync (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=865a47a3:9044:37) @ http://localhost:5173/node_modules/.vite/deps/development-D7FwSc4C.js?v=865a47a3:5398
+[ 1453463ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=099b568b:15804
+[ 1476075ms] [ERROR] Error: layers[13].layout.text-size: Only one zoom-based "step" or "interpolate" subexpression may be used in an expression.
+    at il (http://localhost:5173/node_modules/.vite/deps/maplibre-gl.js?v=099b568b:9287:16)
+    at rl (http://localhost:5173/node_modules/.vite/deps/maplibre-gl.js?v=099b568b:9278:9)
+    at gk.setState (http://localhost:5173/node_modules/.vite/deps/maplibre-gl.js?v=099b568b:29604:80)
+    at UP._updateDiff (http://localhost:5173/node_modules/.vite/deps/maplibre-gl.js?v=099b568b:36062:15)
+    at UP._diffStyle (http://localhost:5173/node_modules/.vite/deps/maplibre-gl.js?v=099b568b:36058:71)
+    at UP.setStyle (http://localhost:5173/node_modules/.vite/deps/maplibre-gl.js?v=099b568b:36019:166)
+    at Maplibre._updateStyle (http://localhost:5173/node_modules/.vite/deps/@vis__gl_react-maplibre.js?v=099b568b:488:14)
+    at Maplibre.setProps (http://localhost:5173/node_modules/.vite/deps/@vis__gl_react-maplibre.js?v=099b568b:329:8)
+    at http://localhost:5173/node_modules/.vite/deps/@vis__gl_react-maplibre.js?v=099b568b:660:32
+    at Object.react_stack_bottom_frame (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=099b568b:14178:13) @ http://localhost:5173/node_modules/.vite/deps/@vis__gl_react-maplibre.js?v=099b568b:293
+[ 1985216ms] [ERROR] Encountered a script tag while rendering React component. Scripts inside React components are never executed when rendering on the client. Consider using template tag instead (https://developer.mozilla.org/en-US/docs/Web/HTML/Element/template). @ http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=099b568b:6614
+[ 1985228ms] [ERROR] %o
+
+%s
+
+%s
+ ReferenceError: useMap is not defined
+    at OverlayCatcher (http://localhost:5173/app/components/map/route-map.tsx?t=1791726013910:388:7)
+    at Object.react_stack_bottom_frame (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=099b568b:14142:12)
+    at renderWithHooks (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=099b568b:4400:19)
+    at updateFunctionComponent (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=099b568b:5775:16)
+    at beginWork (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=099b568b:6391:20)
+    at runWithFiberInDEV (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=099b568b:944:66)
+    at performUnitOfWork (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=099b568b:9148:92)
+    at workLoopSync (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=099b568b:9044:37)
+    at renderRootSync (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=099b568b:9028:6)
+    at performWorkOnRoot (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=099b568b:8715:27) The above error occurred in the <OverlayCatcher> component. React will try to recreate this component tree from scratch using the error boundary you provided, RenderErrorBoundary. @ http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=099b568b:5466
+[ 1985228ms] [ERROR] React Router caught the following error during render ReferenceError: useMap is not defined
+    at OverlayCatcher (http://localhost:5173/app/components/map/route-map.tsx?t=1791726013910:388:7)
+    at Object.react_stack_bottom_frame (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=099b568b:14142:12)
+    at renderWithHooks (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=099b568b:4400:19)
+    at updateFunctionComponent (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=099b568b:5775:16)
+    at beginWork (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=099b568b:6391:20)
+    at runWithFiberInDEV (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=099b568b:944:66)
+    at performUnitOfWork (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=099b568b:9148:92)
+    at workLoopSync (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=099b568b:9044:37)
+    at renderRootSync (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=099b568b:9028:6)
+    at performWorkOnRoot (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=099b568b:8715:27) @ http://localhost:5173/node_modules/.vite/deps/development-D7FwSc4C.js?v=099b568b:5398
+[ 3165873ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=099b568b:15804
+[ 3184187ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=099b568b:15804
+[ 3291858ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=099b568b:15804
+[ 3626993ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=099b568b:15804
+[ 3666325ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=099b568b:15804
+[ 3770003ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=099b568b:15804
+[ 3774338ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=099b568b:15804
+[ 3801983ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=099b568b:15804
