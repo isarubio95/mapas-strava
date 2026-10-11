@@ -1,6 +1,7 @@
 import { useMemo } from "react"
 import { data, useSearchParams } from "react-router"
 
+import { RoutesLoader } from "~/components/loader/routes-loader"
 import { PosterStudio } from "~/components/poster/poster-studio"
 import { useActivities } from "~/lib/activities-api"
 import { filtersFromSearch } from "~/lib/filters-url"
@@ -28,17 +29,17 @@ export default function Poster({ loaderData }: Route.ComponentProps) {
   const [params] = useSearchParams()
   const filters = useMemo(() => filtersFromSearch(params), [params])
 
-  if (!activities) {
+  if (failed) {
     return (
       <main className="flex h-svh items-center justify-center bg-background">
         <p className="text-muted-foreground">
-          {failed
-            ? "No se han podido cargar tus rutas. Recarga la página."
-            : "Cargando tus rutas…"}
+          No se han podido cargar tus rutas. Recarga la página.
         </p>
       </main>
     )
   }
+
+  if (!activities) return <RoutesLoader />
 
   return (
     <PosterStudio

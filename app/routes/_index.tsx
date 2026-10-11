@@ -1,5 +1,6 @@
 import { data } from "react-router"
 
+import { RoutesLoader } from "~/components/loader/routes-loader"
 import { MapApp } from "~/components/shell/map-app"
 import { loadProfile, useActivities } from "~/lib/activities-api"
 import type { SportColors } from "~/lib/sports"
@@ -39,13 +40,7 @@ export default function Index({ loaderData }: Route.ComponentProps) {
     )
   }
 
-  if (!activities) {
-    return (
-      <main className="flex h-svh items-center justify-center bg-background">
-        <p className="text-muted-foreground">Cargando tus rutas…</p>
-      </main>
-    )
-  }
+  if (!activities) return <RoutesLoader />
 
   return (
     <MapApp
