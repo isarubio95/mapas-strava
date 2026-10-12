@@ -101,7 +101,7 @@ export interface PosterRouteStyle {
   weight: number
 }
 
-const SOURCE = "openmaptiles"
+export const POSTER_TILES_SOURCE = "openmaptiles"
 export const POSTER_ROUTES_SOURCE = "routes"
 
 /** Zoom where the widths below apply: a whole city on the poster. */
@@ -143,7 +143,7 @@ function road(
   return {
     id,
     type: "line",
-    source: SOURCE,
+    source: POSTER_TILES_SOURCE,
     "source-layer": "transportation",
     // Tunnels too: a poster reads better with every road continuous.
     filter: ["all", lines, ["match", ["get", "class"], classes, true, false]],
@@ -181,7 +181,7 @@ export function createPosterStyle(
     {
       id: "landcover",
       type: "fill",
-      source: SOURCE,
+      source: POSTER_TILES_SOURCE,
       "source-layer": "landcover",
       filter: [
         "match",
@@ -195,14 +195,14 @@ export function createPosterStyle(
     {
       id: "park",
       type: "fill",
-      source: SOURCE,
+      source: POSTER_TILES_SOURCE,
       "source-layer": "park",
       paint: { "fill-color": palette.park, "fill-opacity": 0.9 },
     },
     {
       id: "water",
       type: "fill",
-      source: SOURCE,
+      source: POSTER_TILES_SOURCE,
       "source-layer": "water",
       filter: ["!=", ["get", "brunnel"], "tunnel"],
       paint: { "fill-color": palette.water },
@@ -210,7 +210,7 @@ export function createPosterStyle(
     {
       id: "waterway",
       type: "line",
-      source: SOURCE,
+      source: POSTER_TILES_SOURCE,
       "source-layer": "waterway",
       paint: {
         "line-color": palette.water,
@@ -234,7 +234,7 @@ export function createPosterStyle(
     {
       id: "rail",
       type: "line",
-      source: SOURCE,
+      source: POSTER_TILES_SOURCE,
       "source-layer": "transportation",
       filter: [
         "all",
@@ -283,7 +283,7 @@ export function createPosterStyle(
     version: 8,
     name: "trazo-poster",
     sources: {
-      [SOURCE]: {
+      [POSTER_TILES_SOURCE]: {
         type: "vector",
         url: "https://tiles.openfreemap.org/planet",
         attribution: OPENFREEMAP_ATTRIBUTION,

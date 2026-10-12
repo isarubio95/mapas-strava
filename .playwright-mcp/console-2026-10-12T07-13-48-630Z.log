@@ -1,1 +1,36 @@
 [    1296ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=2d8fec12:15804
+[  915088ms] [LOG] [vite] server connection lost. Polling for restart... @ http://localhost:5173/@vite/client:1082
+[ 1046418ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=2d8fec12:15804
+[ 1643682ms] [ERROR] [vite] SyntaxError: The requested module '/app/lib/map/routes-3d.ts?t=1791790872307' does not provide an export named 'SELECTION_3D_CORE' @ http://localhost:5173/@vite/client:1014
+[ 1643682ms] [ERROR] [vite] Failed to reload /app/components/map/route-map.tsx. This could be due to syntax errors or importing non-existent modules. (see errors above) @ http://localhost:5173/@vite/client:1014
+[ 1643687ms] [ERROR] [vite] SyntaxError: The requested module '/app/lib/map/routes-3d.ts?t=1791790872307' does not provide an export named 'SELECTION_3D_CORE' @ http://localhost:5173/@vite/client:1014
+[ 1643687ms] [ERROR] [vite] Failed to reload /app/components/map/route-map.tsx. This could be due to syntax errors or importing non-existent modules. (see errors above) @ http://localhost:5173/@vite/client:1014
+[ 4118178ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=2d8fec12:15804
+[ 4142766ms] [ERROR] Encountered a script tag while rendering React component. Scripts inside React components are never executed when rendering on the client. Consider using template tag instead (https://developer.mozilla.org/en-US/docs/Web/HTML/Element/template). @ http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=2d8fec12:6614
+[ 4142773ms] [ERROR] %o
+
+%s
+
+%s
+ ReferenceError: posterHref is not defined
+    at MobileChrome (http://localhost:5173/app/components/shell/map-app.tsx?t=1791793371157:1004:13)
+    at Object.react_stack_bottom_frame (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=2d8fec12:14142:12)
+    at renderWithHooks (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=2d8fec12:4400:19)
+    at updateFunctionComponent (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=2d8fec12:5775:16)
+    at beginWork (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=2d8fec12:6391:20)
+    at runWithFiberInDEV (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=2d8fec12:944:66)
+    at performUnitOfWork (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=2d8fec12:9148:92)
+    at workLoopSync (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=2d8fec12:9044:37)
+    at renderRootSync (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=2d8fec12:9028:6)
+    at performWorkOnRoot (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=2d8fec12:8715:27) The above error occurred in the <MobileChrome> component. React will try to recreate this component tree from scratch using the error boundary you provided, RenderErrorBoundary. @ http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=2d8fec12:5466
+[ 4142773ms] [ERROR] React Router caught the following error during render ReferenceError: posterHref is not defined
+    at MobileChrome (http://localhost:5173/app/components/shell/map-app.tsx?t=1791793371157:1004:13)
+    at Object.react_stack_bottom_frame (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=2d8fec12:14142:12)
+    at renderWithHooks (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=2d8fec12:4400:19)
+    at updateFunctionComponent (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=2d8fec12:5775:16)
+    at beginWork (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=2d8fec12:6391:20)
+    at runWithFiberInDEV (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=2d8fec12:944:66)
+    at performUnitOfWork (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=2d8fec12:9148:92)
+    at workLoopSync (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=2d8fec12:9044:37)
+    at renderRootSync (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=2d8fec12:9028:6)
+    at performWorkOnRoot (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=2d8fec12:8715:27) @ http://localhost:5173/node_modules/.vite/deps/development-D7FwSc4C.js?v=2d8fec12:5398

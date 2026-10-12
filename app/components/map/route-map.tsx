@@ -13,6 +13,7 @@ import type { Layer } from "@deck.gl/core"
 
 import type { Activity } from "~/lib/activities"
 import { dayNumber, type Filters } from "~/lib/filters"
+import { viewBounds, type BBox } from "~/lib/geo"
 import {
   buildPathColors,
   heatmapLayer,
@@ -24,12 +25,9 @@ import { Flyover } from "~/lib/map/flyover"
 import { setupMapLibre } from "~/lib/map/maplibre"
 import {
   FLYOVER_SOURCE,
+  paintSelection,
   pointGeoJSON,
-  progressGradient,
   ROUTES_3D_PICK_LAYER,
-  SELECTION_3D_CORE,
-  SELECTION_3D_HALO,
-  selectionColors,
   withRoutes3d,
 } from "~/lib/map/routes-3d"
 import {
@@ -90,6 +88,8 @@ export interface RouteMapProps {
   /** The flyover reached the end or someone moved the map. */
   onFlyoverEnd?: () => void
   className?: string
+  /** The ground in view, flat and north-up, whenever the map stops moving. */
+  onViewChange?: (bounds: BBox) => void
   onSummary?: (
     summary: Summary,
     meta: DatasetMeta,
@@ -178,6 +178,7 @@ export function RouteMap({
   onFlyoverProgress,
   onFlyoverEnd,
   className,
+  onViewChange,
   onSummary,
 }: RouteMapProps) {
   const mapRef = useRef<MapRef>(null)
@@ -212,13 +213,18 @@ export function RouteMap({
     [activities]
   )
 
-  const selectionColor = useMemo(() => {
+  /** The selected route's color in both themes, so 3D can fade between them. */
+  const selectionColors = useMemo(() => {
     const activity =
       selectedId == null
         ? null
         : activities.find((item) => item.id === selectedId)
-    return activity ? sportColor(activity.sportType, theme, sportColors) : null
-  }, [selectedId, activities, theme, sportColors])
+    if (!activity) return null
+    return {
+      dark: sportColor(activity.sportType, "dark", sportColors),
+      light: sportColor(activity.sportType, "light", sportColors),
+    }
+  }, [selectedId, activities, sportColors])
 
   const mapStyle = useMemo(() => {
     const style = createMapStyle(palette ?? paletteForTheme(theme), {
@@ -227,10 +233,10 @@ export function RouteMap({
     })
     if (!relief) return style
     const shown =
-      selection && selectionColor && selectedId != null
+      selection && selectionColors && selectedId != null
         ? {
             coords: selection.coords,
-            color: selectionColor,
+            colors: selectionColors,
             // Where the draw-in stands, so a rebuilt style does not flash it whole.
             drawn: selectionDrawn(selection.at, animate && !flyover),
           }
@@ -258,7 +264,7 @@ export function RouteMap({
     isolated,
     selectedId,
     selection,
-    selectionColor,
+    selectionColors,
     flyover,
     animate,
   ])
@@ -469,10 +475,8 @@ export function RouteMap({
 
   const flyoverRef = useRef(flyover)
   flyoverRef.current = flyover
-  const selectionTint = useRef<ReturnType<typeof selectionColors> | null>(null)
-  selectionTint.current = selectionColor
-    ? selectionColors(selectionColor, theme)
-    : null
+  const selectionTint = useRef(selectionColors)
+  selectionTint.current = selectionColors
 
   /** The selected route draws itself over the terrain. */
   useEffect(() => {
@@ -482,18 +486,7 @@ export function RouteMap({
     const step = () => {
       const tint = selectionTint.current
       const share = selectionDrawn(selection.at, true)
-      if (tint && map.getLayer(SELECTION_3D_CORE)) {
-        map.setPaintProperty(
-          SELECTION_3D_HALO,
-          "line-gradient",
-          progressGradient(tint.halo, share)
-        )
-        map.setPaintProperty(
-          SELECTION_3D_CORE,
-          "line-gradient",
-          progressGradient(tint.core, share)
-        )
-      }
+      if (tint) paintSelection(map, tint, share)
       if (share < 1) frame = requestAnimationFrame(step)
     }
     frame = requestAnimationFrame(step)
@@ -512,17 +505,7 @@ export function RouteMap({
     const coords = selection.coords
     const paint = (share: number) => {
       const tint = selectionTint.current
-      if (!tint || !map.getLayer(SELECTION_3D_CORE)) return
-      map.setPaintProperty(
-        SELECTION_3D_HALO,
-        "line-gradient",
-        progressGradient(tint.halo, share)
-      )
-      map.setPaintProperty(
-        SELECTION_3D_CORE,
-        "line-gradient",
-        progressGradient(tint.core, share, tint.ahead)
-      )
+      if (tint) paintSelection(map, tint, share, true)
     }
     const end = () => flyoverCallbacks.current.onFlyoverEnd?.()
     const flight = new Flyover(
@@ -718,6 +701,22 @@ export function RouteMap({
     ]
   )
 
+  const reportView = useCallback(() => {
+    const map = mapRef.current
+    if (!map || !onViewChange) return
+    const center = map.getCenter()
+    const container = map.getContainer()
+    onViewChange(
+      viewBounds(
+        center.lng,
+        center.lat,
+        map.getZoom(),
+        container.clientWidth,
+        container.clientHeight
+      )
+    )
+  }, [onViewChange])
+
   const onMouseMove = useCallback(
     (event: { point: { x: number; y: number } }) => {
       if (pickingPoint) {
@@ -752,7 +751,9 @@ export function RouteMap({
         onLoad={() => {
           frameRoutes()
           frameSelection()
+          reportView()
         }}
+        onMoveEnd={reportView}
         onClick={onClick}
         onMouseMove={onMouseMove}
         onMouseDown={() => setCursor(pickingPoint ? "crosshair" : "grabbing")}

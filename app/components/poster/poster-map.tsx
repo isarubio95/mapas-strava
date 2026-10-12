@@ -8,8 +8,11 @@ import { useEffect, useImperativeHandle, useRef, type Ref } from "react"
 
 import type { BBox } from "~/lib/geo"
 import { setupMapLibre } from "~/lib/map/maplibre"
-import { POSTER_ROUTES_SOURCE } from "~/lib/map/poster-style"
-import type { PosterRoutes } from "~/lib/poster"
+import {
+  POSTER_ROUTES_SOURCE,
+  POSTER_TILES_SOURCE,
+} from "~/lib/map/poster-style"
+import type { PlaceLabel, PosterRoutes } from "~/lib/poster"
 
 import "maplibre-gl/dist/maplibre-gl.css"
 
@@ -27,6 +30,15 @@ export interface PosterMapHandle {
   fit(bounds: BBox): void
 }
 
+/** What the map shows once it stops moving and its tiles are in. */
+export interface PosterView {
+  center: { lng: number; lat: number }
+  zoom: number
+  bounds: BBox
+  /** Place labels in the loaded tiles, including some outside `bounds`. */
+  places: PlaceLabel[]
+}
+
 export interface PosterMapProps {
   /** Logical size; the parent scales it down to fit the screen. */
   width: number
@@ -36,6 +48,10 @@ export interface PosterMapProps {
   routes: PosterRoutes | null
   initialBounds: BBox | null
   onMoveEnd?: (center: { lng: number; lat: number }) => void
+  /** First time every tile and route of the initial view is drawn. */
+  onReady?: () => void
+  /** After the first view and every move, once the tiles are in. */
+  onSettle?: (view: PosterView) => void
   ref?: Ref<PosterMapHandle>
 }
 
@@ -50,6 +66,39 @@ function framePadding(width: number) {
     right: width * 0.06,
     bottom: width * 0.3,
     left: width * 0.06,
+  }
+}
+
+function viewOf(map: MapLibreMap): PosterView {
+  const center = map.getCenter()
+  const bounds = map.getBounds()
+  const places = map
+    .querySourceFeatures(POSTER_TILES_SOURCE, { sourceLayer: "place" })
+    .flatMap((feature): PlaceLabel[] => {
+      const { geometry, properties } = feature
+      const name = properties["name:es"] ?? properties.name
+      if (geometry.type !== "Point" || !name) return []
+      const [lng, lat] = geometry.coordinates
+      return [
+        {
+          name: String(name),
+          kind: String(properties.class),
+          rank: Number(properties.rank ?? Infinity),
+          lng,
+          lat,
+        },
+      ]
+    })
+  return {
+    center: { lng: center.lng, lat: center.lat },
+    zoom: map.getZoom(),
+    bounds: [
+      bounds.getWest(),
+      bounds.getSouth(),
+      bounds.getEast(),
+      bounds.getNorth(),
+    ],
+    places,
   }
 }
 
@@ -90,6 +139,8 @@ export function PosterMap({
   routes,
   initialBounds,
   onMoveEnd,
+  onReady,
+  onSettle,
   ref,
 }: PosterMapProps) {
   const container = useRef<HTMLDivElement>(null)
@@ -100,6 +151,10 @@ export function PosterMap({
   const capturing = useRef(false)
   const onMoveEndRef = useRef(onMoveEnd)
   onMoveEndRef.current = onMoveEnd
+  const onReadyRef = useRef(onReady)
+  onReadyRef.current = onReady
+  const onSettleRef = useRef(onSettle)
+  onSettleRef.current = onSettle
   routesRef.current = routes
   ratioRef.current = pixelRatio
 
@@ -142,6 +197,18 @@ export function PosterMap({
       const center = map.getCenter()
       onMoveEndRef.current?.({ lng: center.lng, lat: center.lat })
     })
+    map.once("idle", () => onReadyRef.current?.())
+    let settling = false
+    const settle = () => {
+      if (settling) return
+      settling = true
+      map.once("idle", () => {
+        settling = false
+        onSettleRef.current?.(viewOf(map))
+      })
+    }
+    map.once("load", settle)
+    map.on("moveend", settle)
 
     return () => {
       map.remove()

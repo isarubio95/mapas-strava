@@ -57,7 +57,7 @@ describe("withRoutes3d", () => {
       sports: ["Run"],
       theme: "light",
       hidden: true,
-      selection: { coords, color: "#0f7a4f" },
+      selection: { coords, colors: { dark: "#5ef2a6", light: "#0f7a4f" } },
     })
     const core = style.layers.find((layer) => layer.id === ROUTES_3D_PICK_LAYER)
     expect(core?.layout).toMatchObject({ visibility: "none" })
@@ -74,11 +74,33 @@ describe("withRoutes3d", () => {
       routes: "blob:routes",
       sports: ["Run"],
       theme: "dark",
-      selection: { coords, color: "#5ef2a6" },
+      selection: { coords, colors: { dark: "#5ef2a6", light: "#0f7a4f" } },
       flyoverStart: [-3.7, 40.4],
     })
     expect(style.sources[FLYOVER_SOURCE]).toMatchObject({ type: "geojson" })
     expect(style.layers.map((layer) => layer.id)).toContain("flyover-head")
+  })
+
+  it("keeps both themes' layers and lets the theme pick their opacity", () => {
+    const input = {
+      routes: "blob:routes",
+      sports: ["Run"],
+      selection: { coords, colors: { dark: "#5ef2a6", light: "#0f7a4f" } },
+    }
+    const night = withRoutes3d(relief(), { ...input, theme: "dark" })
+    const day = withRoutes3d(relief(), { ...input, theme: "light" })
+    // Same layers in the same order, so a theme switch only fades paint.
+    expect(day.layers.map((layer) => layer.id)).toEqual(
+      night.layers.map((layer) => layer.id)
+    )
+    const opacity = (style: typeof day, id: string) =>
+      (style.layers.find((layer) => layer.id === id)?.paint as
+        | Record<string, unknown>
+        | undefined)?.["line-opacity"]
+    expect(opacity(night, "routes-3d-glow")).toBeGreaterThan(0)
+    expect(opacity(day, "routes-3d-glow")).toBe(0)
+    expect(opacity(night, ROUTES_3D_PICK_LAYER)).toBe(0)
+    expect(opacity(day, ROUTES_3D_PICK_LAYER)).toBeGreaterThan(0)
   })
 })
 

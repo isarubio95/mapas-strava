@@ -86,42 +86,155 @@ const FRAME_SAMPLES = 40_000
 /** Share of route points left out on each side when framing. */
 const FRAME_TRIM = 0.04
 
+/** Up to FRAME_SAMPLES route points, evenly spread. */
+function samplePoints(routes: PosterRoutes) {
+  let total = 0
+  for (const feature of routes.features)
+    total += feature.geometry.coordinates.length
+  const step = Math.max(1, Math.floor(total / FRAME_SAMPLES))
+  const points: GeoJSON.Position[] = []
+  let index = 0
+  for (const feature of routes.features) {
+    for (const point of feature.geometry.coordinates) {
+      if (index++ % step === 0) points.push(point)
+    }
+  }
+  return points
+}
+
+const inBox = ([lng, lat]: GeoJSON.Position, box: BBox) =>
+  lng >= box[0] && lat >= box[1] && lng <= box[2] && lat <= box[3]
+
+/** The `trim`–(1 − `trim`) range of the points inside `area`. */
+function trimmedBox(
+  points: GeoJSON.Position[],
+  area: BBox | null,
+  trim: number
+): BBox | null {
+  const lngs: number[] = []
+  const lats: number[] = []
+  for (const point of points) {
+    if (area && !inBox(point, area)) continue
+    lngs.push(point[0])
+    lats.push(point[1])
+  }
+  if (lngs.length < 2) return null
+  lngs.sort((a, b) => a - b)
+  lats.sort((a, b) => a - b)
+  const at = (values: number[], share: number) =>
+    values[Math.round(share * (values.length - 1))]
+  return [at(lngs, trim), at(lats, trim), at(lngs, 1 - trim), at(lats, 1 - trim)]
+}
+
 /**
  * Where the routes are dense: the 4–96 % range of their points inside the
  * home area. Framing the whole home area zooms out too far for the tiles to
  * carry residential streets.
  */
 export function routesFrame(routes: PosterRoutes, home: BBox | null) {
-  let total = 0
-  for (const feature of routes.features)
-    total += feature.geometry.coordinates.length
-  const step = Math.max(1, Math.floor(total / FRAME_SAMPLES))
-  const lngs: number[] = []
-  const lats: number[] = []
-  let index = 0
-  for (const feature of routes.features) {
-    for (const [lng, lat] of feature.geometry.coordinates) {
-      if (index++ % step) continue
-      if (
-        home &&
-        (lng < home[0] || lat < home[1] || lng > home[2] || lat > home[3])
-      )
-        continue
-      lngs.push(lng)
-      lats.push(lat)
+  return trimmedBox(samplePoints(routes), home, FRAME_TRIM) ?? home
+}
+
+/** Every point of the routes: frames a single route whole. */
+export function routesBounds(routes: PosterRoutes) {
+  return trimmedBox(samplePoints(routes), null, 0)
+}
+
+/** Smallest half side of the area "Centrar" frames: a town and its outskirts. */
+const LOCAL_RADIUS_KM = 12
+const KM_PER_DEGREE = 111.32
+
+/**
+ * Where the routes are dense around the middle of `view`, at least a town
+ * across. When no route passes there, around the nearest route point, so
+ * the frame stays in the place being looked at instead of going home.
+ */
+export function localFrame(routes: PosterRoutes, view: BBox) {
+  const points = samplePoints(routes)
+  if (!points.length) return null
+  let lng = (view[0] + view[2]) / 2
+  let lat = (view[1] + view[3]) / 2
+  const cos = Math.cos((lat * Math.PI) / 180)
+  const halfLat = Math.max((view[3] - view[1]) / 2, LOCAL_RADIUS_KM / KM_PER_DEGREE)
+  const halfLng = Math.max(
+    (view[2] - view[0]) / 2,
+    LOCAL_RADIUS_KM / (KM_PER_DEGREE * cos)
+  )
+  const area = (): BBox => [lng - halfLng, lat - halfLat, lng + halfLng, lat + halfLat]
+  if (!points.some((point) => inBox(point, area()))) {
+    let best = Infinity
+    for (const [x, y] of points) {
+      const distance = Math.hypot((x - lng) * cos, y - lat)
+      if (distance < best) {
+        best = distance
+        ;[lng, lat] = [x, y]
+      }
     }
   }
-  if (lngs.length < 2) return home
-  lngs.sort((a, b) => a - b)
-  lats.sort((a, b) => a - b)
-  const at = (values: number[], share: number) =>
-    values[Math.round(share * (values.length - 1))]
-  return [
-    at(lngs, FRAME_TRIM),
-    at(lats, FRAME_TRIM),
-    at(lngs, 1 - FRAME_TRIM),
-    at(lats, 1 - FRAME_TRIM),
-  ] satisfies BBox
+  return trimmedBox(points, area(), FRAME_TRIM)
+}
+
+/** Parses a `w,s,e,n` box from the URL. */
+export function parseBBox(value: string | null): BBox | null {
+  const parts = value?.split(",").map(Number) ?? []
+  if (parts.length !== 4 || !parts.every(Number.isFinite)) return null
+  const [west, south, east, north] = parts
+  if (west >= east || south >= north) return null
+  return [west, south, east, north]
+}
+
+export function formatBBox(box: BBox) {
+  return box.map((value) => value.toFixed(4)).join(",")
+}
+
+/**
+ * From this zoom on, the poster frames a city and is named after it; further
+ * out it covers a region (about 120 km across at Spain's latitude).
+ */
+export const CITY_MIN_ZOOM = 11.5
+
+/** A place label from the basemap tiles. */
+export interface PlaceLabel {
+  name: string
+  /** OpenMapTiles class: city, town, village… */
+  kind: string
+  /** Importance within its class; lower is bigger. */
+  rank: number
+  lng: number
+  lat: number
+}
+
+const PLACE_KINDS = ["city", "town", "village"]
+
+/**
+ * The place a view is about: the biggest city, town or village in the
+ * middle of the view, or anywhere in it when the middle is empty.
+ */
+export function focusedPlace(
+  places: PlaceLabel[],
+  [west, south, east, north]: BBox
+): PlaceLabel | null {
+  const lng = (west + east) / 2
+  const lat = (south + north) / 2
+  const cos = Math.cos((lat * Math.PI) / 180)
+  const distance = (place: PlaceLabel) =>
+    Math.hypot((place.lng - lng) * cos, place.lat - lat)
+  const known = places.filter((place) => PLACE_KINDS.includes(place.kind))
+  for (const share of [0.5, 1]) {
+    const inside = known.filter(
+      (place) =>
+        Math.abs(place.lng - lng) <= ((east - west) / 2) * share &&
+        Math.abs(place.lat - lat) <= ((north - south) / 2) * share
+    )
+    if (!inside.length) continue
+    return inside.sort(
+      (a, b) =>
+        PLACE_KINDS.indexOf(a.kind) - PLACE_KINDS.indexOf(b.kind) ||
+        a.rank - b.rank ||
+        distance(a) - distance(b)
+    )[0]
+  }
+  return null
 }
 
 export interface PosterText {

@@ -1,6 +1,6 @@
 import {
   ArrowLeftIcon,
-  CornersOutIcon,
+  CrosshairSimpleIcon,
   DownloadSimpleIcon,
   FilePdfIcon,
 } from "@phosphor-icons/react"
@@ -17,6 +17,7 @@ import { Spinner } from "~/components/ui/spinner"
 import { Switch } from "~/components/ui/switch"
 import type { Activity } from "~/lib/activities"
 import { dayNumber, type Filters } from "~/lib/filters"
+import type { BBox } from "~/lib/geo"
 import {
   createPosterStyle,
   isDarkPalette,
@@ -27,20 +28,25 @@ import {
 } from "~/lib/map/poster-style"
 import { useRouteEngine } from "~/lib/map/use-engine"
 import {
+  CITY_MIN_ZOOM,
   drawPosterOverlay,
   exportSize,
+  focusedPlace,
   formatCoordinates,
+  localFrame,
   POSTER_FONTS,
   POSTER_FORMATS,
   posterRoutes,
   posterSize,
+  routesBounds,
   routesFrame,
   type PosterText,
 } from "~/lib/poster"
 import { sportColor, type SportColors } from "~/lib/sports"
+import { createClient } from "~/lib/supabase/client"
 import { cn } from "~/lib/utils"
 
-import type { PosterMap, PosterMapHandle } from "./poster-map"
+import type { PosterMap, PosterMapHandle, PosterView } from "./poster-map"
 
 type FormatId = (typeof POSTER_FORMATS)[number]["id"]
 type Download = "png" | "pdf"
@@ -64,6 +70,15 @@ function customPalette(colors: CustomColors): PosterPalette {
     highway: colors.roads,
     text: textForLand(colors.land),
   }
+}
+
+/** Region and country that contain a point, when the catalog has them. */
+async function zonesAt({ lng, lat }: { lng: number; lat: number }) {
+  const { data } = await createClient().rpc("zones_at", { lng, lat })
+  const zones = (data ?? []) as { name: string; level: string }[]
+  const named = (level: string) =>
+    zones.find((item) => item.level === level)?.name ?? null
+  return { region: named("region"), country: named("country") }
 }
 
 function slug(text: string) {
@@ -131,10 +146,16 @@ function useStage() {
 export function PosterStudio({
   activities,
   filters,
+  routeId = null,
+  view = null,
   sportColors,
 }: {
   activities: Activity[]
   filters: Filters
+  /** A single route, whatever the filters. */
+  routeId?: number | null
+  /** Where the map was when the poster was opened. */
+  view?: BBox | null
   sportColors?: SportColors
 }) {
   const PosterMapView = usePosterMapComponent()
@@ -155,12 +176,21 @@ export function PosterStudio({
   })
   const [bySport, setBySport] = useState(false)
   const [weight, setWeight] = useState(1)
-  const [title, setTitle] = useState("MADRID")
-  const [subtitle, setSubtitle] = useState("ESPAÑA")
+  // The title names what the map frames until the user writes their own.
+  const [placeName, setPlaceName] = useState("")
+  const [customTitle, setCustomTitle] = useState<string | null>(null)
+  const title = customTitle ?? placeName
+  const naming = useRef(0)
+  // Same for the subtitle and the country.
+  const [country, setCountry] = useState("")
+  const [customSubtitle, setCustomSubtitle] = useState<string | null>(null)
+  const subtitle = customSubtitle ?? country
+  const lastView = useRef<PosterView | null>(null)
   const [center, setCenter] = useState<{ lng: number; lat: number } | null>(
     null
   )
   const [downloading, setDownloading] = useState<Download | null>(null)
+  const [mapReady, setMapReady] = useState(false)
 
   const format =
     POSTER_FORMATS.find((item) => item.id === formatId) ?? POSTER_FORMATS[0]
@@ -192,11 +222,26 @@ export function PosterStudio({
     return [from, to]
   }, [filters.from, filters.to, meta])
 
+  const routeIndex = useMemo(() => {
+    const index = activities.findIndex((activity) => activity.id === routeId)
+    return index < 0 ? null : index
+  }, [activities, routeId])
+  const route = routeIndex == null ? null : activities[routeIndex]
+
   const routes = useMemo(() => {
-    if (!geometry || !query) return null
+    if (!geometry || (routeIndex == null && !query)) return null
     const theme = dark ? "dark" : "light"
     const cache = new Map<string, string>()
-    return posterRoutes(geometry, query.mask, dayRange, (path) => {
+    const [mask, days]: [Uint8Array, [number, number]] =
+      routeIndex == null
+        ? [query!.mask, dayRange]
+        : [
+            Uint8Array.from(geometry.pathActivity, (owner) =>
+              owner === routeIndex ? 1 : 0
+            ),
+            [-Infinity, Infinity],
+          ]
+    return posterRoutes(geometry, mask, days, (path) => {
       const type = activities[geometry.pathActivity[path]].sportType
       let color = cache.get(type)
       if (!color) {
@@ -205,12 +250,28 @@ export function PosterStudio({
       }
       return color
     })
-  }, [geometry, query, dayRange, activities, sportColors, dark])
+  }, [geometry, query, dayRange, routeIndex, activities, sportColors, dark])
 
-  const frame = useMemo(
-    () => (routes ? routesFrame(routes, geometry?.home ?? null) : null),
-    [routes, geometry]
-  )
+  /** The route whole, else the view the map had, else where the routes are dense. */
+  const initialFrame = useMemo(() => {
+    if (!routes) return null
+    return (
+      (route && routesBounds(routes)) ??
+      view ??
+      routesFrame(routes, geometry?.home ?? null)
+    )
+  }, [routes, route, view, geometry])
+
+  /** Back to the route, or to the routes of the place the poster shows. */
+  function center() {
+    if (!routes) return
+    const frame = route
+      ? routesBounds(routes)
+      : lastView.current
+        ? localFrame(routes, lastView.current.bounds)
+        : initialFrame
+    if (frame) mapHandle.current?.fit(frame)
+  }
 
   const text: PosterText = useMemo(
     () => ({
@@ -235,6 +296,24 @@ export function PosterStudio({
       Math.min(scale * stage.dpr * 2, 4096 / Math.max(width, height)) * 100
     ) / 100
   const overlayRatio = scale * stage.dpr
+
+  /** A city when the map is close enough to frame one, else its region. */
+  async function nameView(view: PosterView) {
+    lastView.current = view
+    if (customTitle !== null && customSubtitle !== null) return
+    const id = ++naming.current
+    const place = focusedPlace(view.places, view.bounds)
+    const zones = await zonesAt(view.center)
+    if (id !== naming.current) return
+    const name =
+      (view.zoom >= CITY_MIN_ZOOM && place?.name) ||
+      zones.region ||
+      zones.country ||
+      place?.name
+    if (name) setPlaceName(name)
+    // Outside the catalog's countries, better no country than a wrong one.
+    setCountry(zones.country ?? "")
+  }
 
   useEffect(() => {
     const canvas = overlay.current
@@ -333,9 +412,9 @@ export function PosterStudio({
           </Link>
           <h1 className="text-2xl font-semibold tracking-tight">Póster</h1>
           <p className="text-sm text-muted-foreground">
-            {geometry
-              ? `${routeCount.toLocaleString("es-ES")} ${routeCount === 1 ? "ruta" : "rutas"}. Arrastra y haz zoom en el póster para encuadrarlo.`
-              : "Cargando tus rutas…"}
+            {!geometry
+              ? "Cargando tus rutas…"
+              : `${route ? route.name : `${routeCount.toLocaleString("es-ES")} ${routeCount === 1 ? "ruta" : "rutas"}`}. Arrastra y haz zoom en el póster para encuadrarlo.`}
           </p>
         </div>
 
@@ -430,24 +509,27 @@ export function PosterStudio({
             variant="outline"
             size="sm"
             className="self-start"
-            disabled={!frame}
-            onClick={() => frame && mapHandle.current?.fit(frame)}
+            disabled={!routeCount}
+            onClick={center}
           >
-            <CornersOutIcon data-icon="inline-start" />
-            Encuadrar mis rutas
+            <CrosshairSimpleIcon data-icon="inline-start" />
+            {route ? "Centrar la ruta" : "Centrar"}
           </Button>
         </Section>
 
         <Section title="Texto">
           <label className="flex flex-col gap-1.5 text-sm">
             Título
-            <Input value={title} onChange={(e) => setTitle(e.target.value)} />
+            <Input
+              value={title}
+              onChange={(e) => setCustomTitle(e.target.value)}
+            />
           </label>
           <label className="flex flex-col gap-1.5 text-sm">
             Lugar
             <Input
               value={subtitle}
-              onChange={(e) => setSubtitle(e.target.value)}
+              onChange={(e) => setCustomSubtitle(e.target.value)}
             />
           </label>
         </Section>
@@ -515,8 +597,10 @@ export function PosterStudio({
                   pixelRatio={previewRatio}
                   mapStyle={mapStyle}
                   routes={routes}
-                  initialBounds={frame}
+                  initialBounds={initialFrame}
                   onMoveEnd={setCenter}
+                  onReady={() => setMapReady(true)}
+                  onSettle={nameView}
                 />
               ) : (
                 <MapSkeleton className="absolute inset-0" />
@@ -528,10 +612,39 @@ export function PosterStudio({
                 style={{ width, height }}
               />
             </div>
+            <PosterSkeleton
+              width={width * scale}
+              hidden={mapReady && fontsReady}
+            />
           </div>
         )}
       </section>
     </main>
+  )
+}
+
+/**
+ * Covers the paper until the map's first tiles and the title fonts are in,
+ * hinting at the title block so the layout doesn't change when it lifts.
+ */
+function PosterSkeleton({ width, hidden }: { width: number; hidden: boolean }) {
+  return (
+    <div
+      aria-hidden
+      className={cn(
+        "pointer-events-none absolute inset-0 bg-muted transition-opacity duration-500",
+        hidden ? "opacity-0" : "animate-pulse"
+      )}
+    >
+      <div
+        className="absolute left-1/2 -translate-x-1/2 rounded-full bg-foreground/10"
+        style={{ bottom: width * 0.217, width: width * 0.6, height: width * 0.05 }}
+      />
+      <div
+        className="absolute left-1/2 -translate-x-1/2 rounded-full bg-foreground/10"
+        style={{ bottom: width * 0.146, width: width * 0.3, height: width * 0.02 }}
+      />
+    </div>
   )
 }
 

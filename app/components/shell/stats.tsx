@@ -22,10 +22,15 @@ export function Stats({
   const items = [
     { value: formatKm(summary.distance), unit: "km" },
     { value: formatHours(summary.movingTime), unit: "h" },
-    { value: formatCount(summary.count), unit: "salidas" },
+    {
+      value: formatCount(summary.count),
+      unit: summary.count === 1 ? "ruta" : "rutas",
+    },
     ...(compact
       ? []
-      : [{ value: formatCount(Math.round(summary.elevationGain)), unit: "m+" }]),
+      : [
+          { value: formatCount(Math.round(summary.elevationGain)), unit: "m+" },
+        ]),
   ]
 
   return (

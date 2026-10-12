@@ -1,6 +1,7 @@
 import { CrosshairSimpleIcon, DroneIcon, XIcon } from "@phosphor-icons/react"
 
 import { Button } from "~/components/ui/button"
+import { Skeleton } from "~/components/ui/skeleton"
 import type { Activity } from "~/lib/activities"
 import { formatHours, formatKm } from "~/lib/format"
 import { getSport, sportColor } from "~/lib/sports"
@@ -10,6 +11,7 @@ export function DetailPanel({
   activity,
   overlapped,
   profile,
+  profileLoading,
   theme,
   focused,
   onFocus,
@@ -20,6 +22,8 @@ export function DetailPanel({
   activity: Activity
   overlapped: Activity[]
   profile: { distance: number[]; altitude: number[] } | null
+  /** The profile is still being fetched: its slot stays reserved. */
+  profileLoading: boolean
   theme: Theme
   /** Only this route is on the map. */
   focused: boolean
@@ -55,9 +59,15 @@ export function DetailPanel({
         <Stat label="Desnivel" value={`${Math.round(activity.elevationGain)} m`} />
       </dl>
 
-      {profile && profile.altitude.length > 1 && (
-        <Elevation distance={profile.distance} altitude={profile.altitude} color={color} />
-      )}
+      {activity.polyline &&
+        (profileLoading ? (
+          <Skeleton className="mt-4 h-20 w-full" aria-label="Cargando perfil de altitud" />
+        ) : (
+          profile &&
+          profile.altitude.length > 1 && (
+            <Elevation distance={profile.distance} altitude={profile.altitude} color={color} />
+          )
+        ))}
 
       {onFlyover && activity.polyline && (
         <Button

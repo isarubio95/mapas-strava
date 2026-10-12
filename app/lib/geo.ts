@@ -4,6 +4,34 @@ const RAD = Math.PI / 180
 export type LngLat = [number, number]
 export type BBox = [minLng: number, minLat: number, maxLng: number, maxLat: number]
 
+/**
+ * What a flat, north-up map of `width`×`height` pixels shows around a center
+ * at a MapLibre zoom (512 px tiles). Unlike the map's own bounds, it ignores
+ * tilt and rotation, so a 3D view gives the ground under it, not the horizon.
+ */
+export function viewBounds(
+  lng: number,
+  lat: number,
+  zoom: number,
+  width: number,
+  height: number
+): BBox {
+  const world = 512 * 2 ** zoom
+  const x = ((lng + 180) / 360) * world
+  const y =
+    ((1 - Math.log(Math.tan(Math.PI / 4 + (lat * RAD) / 2)) / Math.PI) / 2) *
+    world
+  const toLng = (px: number) => (px / world) * 360 - 180
+  const toLat = (py: number) =>
+    Math.atan(Math.sinh(Math.PI * (1 - (2 * py) / world))) / RAD
+  return [
+    toLng(x - width / 2),
+    toLat(Math.min(world, y + height / 2)),
+    toLng(x + width / 2),
+    toLat(Math.max(0, y - height / 2)),
+  ]
+}
+
 export function haversine(
   lng1: number,
   lat1: number,

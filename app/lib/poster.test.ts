@@ -4,6 +4,7 @@ import type { RouteGeometry } from "~/lib/map/engine"
 
 import {
   exportSize,
+  focusedPlace,
   formatCoordinates,
   MAX_EXPORT_SIDE,
   POSTER_FORMATS,
@@ -11,6 +12,7 @@ import {
   posterRoutes,
   posterSize,
   routesFrame,
+  type PlaceLabel,
   type PosterRoutes,
 } from "./poster"
 
@@ -134,5 +136,46 @@ describe("routesFrame", () => {
 
   it("falls back to the home area without routes", () => {
     expect(routesFrame(lines(), [1, 2, 3, 4])).toEqual([1, 2, 3, 4])
+  })
+})
+
+describe("focusedPlace", () => {
+  const place = (
+    name: string,
+    kind: string,
+    rank: number,
+    lng: number,
+    lat: number
+  ): PlaceLabel => ({ name, kind, rank, lng, lat })
+  const view: [number, number, number, number] = [-4, 40, -3, 41]
+
+  it("prefers the biggest place in the middle of the view", () => {
+    const places = [
+      place("Pozuelo", "town", 11, -3.5, 40.5),
+      place("Madrid", "city", 2, -3.6, 40.4),
+      place("Toledo", "city", 1, -3.9, 40.05),
+    ]
+    expect(focusedPlace(places, view)?.name).toBe("Madrid")
+  })
+
+  it("breaks ties by distance to the center", () => {
+    const places = [
+      place("Lejos", "town", 11, -3.3, 40.3),
+      place("Cerca", "town", 11, -3.45, 40.55),
+    ]
+    expect(focusedPlace(places, view)?.name).toBe("Cerca")
+  })
+
+  it("looks at the whole view when the middle is empty", () => {
+    const places = [
+      place("Fuera", "city", 1, -5, 40.5),
+      place("Borde", "village", 30, -3.95, 40.95),
+    ]
+    expect(focusedPlace(places, view)?.name).toBe("Borde")
+  })
+
+  it("ignores labels that are not settlements", () => {
+    const places = [place("Castilla", "state", 3, -3.5, 40.5)]
+    expect(focusedPlace(places, view)).toBeNull()
   })
 })

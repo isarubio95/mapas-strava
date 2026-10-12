@@ -39,8 +39,10 @@ import { ScrollArea } from "~/components/ui/scroll-area"
 import { Segmented, type SegmentedItem } from "~/components/ui/segmented"
 import { filtersFromSearch, filtersToSearch } from "~/lib/filters-url"
 import type { Filters, NearPoint } from "~/lib/filters"
+import type { BBox } from "~/lib/geo"
 import type { DatasetMeta, Histogram, Summary } from "~/lib/map/engine"
 import { createFlyoverProgress } from "~/lib/map/flyover"
+import { formatBBox } from "~/lib/poster"
 import { useMediaQuery } from "~/lib/use-media-query"
 import { useTheme } from "~/lib/theme"
 import {
@@ -165,6 +167,7 @@ export function MapApp({
   const [heatRadius, setHeatRadius] = useState(28)
   const [flying, setFlying] = useState(false)
   const [flyoverProgress] = useState(createFlyoverProgress)
+  const [view, setView] = useState<BBox | null>(null)
   const reducedMotion = useMediaQuery("(prefers-reduced-motion: reduce)")
   const [profile, setProfile] = useState<{
     id: number
@@ -352,6 +355,16 @@ export function MapApp({
 
   const accountMenu = account ? <AccountMenu account={account} /> : null
 
+  // The poster opens on what the map shows: the selected route, or the
+  // filtered routes framed like the map.
+  const posterHref = useMemo(() => {
+    const search = filtersToSearch(filters, new URLSearchParams())
+    if (selectedId != null) search.set("ruta", String(selectedId))
+    else if (view) search.set("encuadre", formatBBox(view))
+    const query = search.toString()
+    return query ? `/poster?${query}` : "/poster"
+  }, [filters, selectedId, view])
+
   const openSearch = () => setSearchOpen(true)
 
   const stopFlying = useCallback(() => setFlying(false), [])
@@ -424,6 +437,7 @@ export function MapApp({
             flyover={flying}
             onFlyoverProgress={flyoverProgress.set}
             onFlyoverEnd={stopFlying}
+            onViewChange={setView}
           />
           {flying && selected && (
             <div className="pointer-events-none absolute inset-x-0 bottom-4 z-30 flex animate-in justify-center px-3 duration-500 fade-in-0 slide-in-from-bottom-4 md:bottom-6">
@@ -476,6 +490,7 @@ export function MapApp({
                 activity={selected}
                 overlapped={overlappedActivities}
                 profile={profile?.id === selected.id ? profile.data : null}
+                profileLoading={profile?.id !== selected.id}
                 theme={resolved}
                 focused={focused}
                 onFocus={(on) => setFocused(on)}
@@ -519,6 +534,7 @@ export function MapApp({
               mode={mode}
               onMode={setMode}
               accountMenu={accountMenu}
+              posterHref={posterHref}
             />
           )}
         </div>
@@ -532,6 +548,7 @@ export function MapApp({
           onMode={setMode}
           onSearch={openSearch}
           accountMenu={accountMenu}
+          posterHref={posterHref}
         />
       )}
 
@@ -708,6 +725,7 @@ function TopBar({
   onMode,
   onSearch,
   accountMenu,
+  posterHref,
 }: {
   layout: LayoutId
   onLayout: (layout: LayoutId) => void
@@ -715,6 +733,7 @@ function TopBar({
   onMode: (mode: MapMode) => void
   onSearch: () => void
   accountMenu: ReactNode
+  posterHref: string
 }) {
   return (
     <header
@@ -741,7 +760,7 @@ function TopBar({
       </div>
       <div className="pointer-events-auto col-span-2 row-start-2 flex items-center gap-2 justify-self-center lg:col-span-1 lg:col-start-2 lg:row-start-1">
         <RouteSearchButton onClick={onSearch} />
-        <PosterLink />
+        <PosterLink to={posterHref} />
         <ModeToggle mode={mode} onMode={onMode} />
       </div>
       <div className="pointer-events-auto col-start-2 row-start-1 flex items-center gap-2 justify-self-end lg:col-start-3">
@@ -766,6 +785,7 @@ function MobileChrome({
   onMode,
   onSearch,
   accountMenu,
+  posterHref,
 }: {
   sports: string[]
   filters: Filters
@@ -780,6 +800,7 @@ function MobileChrome({
   onMode: (mode: MapMode) => void
   onSearch: () => void
   accountMenu: ReactNode
+  posterHref: string
 }) {
   return (
     <div
@@ -796,18 +817,24 @@ function MobileChrome({
           {accountMenu}
         </div>
       </div>
-      {/* On the narrowest phones the poster button wraps above the stats. */}
-      <div className="mx-auto flex w-full max-w-lg flex-wrap-reverse items-center justify-end gap-3">
+      {/* Stats + filters and the poster button share one row. Below 384px
+          of row the poster button collapses to its icon, and if the stats
+          still don't fit, the last figure wraps out of sight. */}
+      <div className="@container mx-auto flex w-full max-w-lg items-center gap-2">
         <Drawer>
           <DrawerTrigger
             render={
               <button
                 type="button"
-                className="panel pointer-events-auto flex flex-auto items-center justify-between gap-3 rounded-4xl px-4 py-3 text-left"
+                className="panel pointer-events-auto flex min-w-0 flex-1 items-center justify-between gap-2 rounded-4xl py-3 pr-3.5 pl-4 text-left"
               />
             }
           >
-            <Stats summary={summary} compact />
+            <Stats
+              summary={summary}
+              compact
+              className="h-7 min-w-0 flex-wrap gap-x-2.5 overflow-hidden [&_dd]:text-base"
+            />
             <SlidersHorizontalIcon
               weight="bold"
               className="size-4 shrink-0 text-muted-foreground"
@@ -844,24 +871,36 @@ function MobileChrome({
             </div>
           </DrawerContent>
         </Drawer>
-        <PosterLink className="pointer-events-auto" />
+        <PosterLink
+          to={posterHref}
+          className="pointer-events-auto @max-[24rem]:w-12.5 @max-[24rem]:px-0"
+          labelClassName="@max-[24rem]:sr-only"
+        />
       </div>
     </div>
   )
 }
 
 /** Way into the poster editor: the app's main call to action. */
-function PosterLink({ className }: { className?: string }) {
+function PosterLink({
+  to,
+  className,
+  labelClassName,
+}: {
+  to: string
+  className?: string
+  labelClassName?: string
+}) {
   return (
     <Link
-      to="/poster"
+      to={to}
       className={cn(
-        "inline-flex h-12.5 shrink-0 items-center justify-center gap-2 rounded-4xl bg-primary px-5 text-sm font-semibold whitespace-nowrap text-primary-foreground shadow-lg shadow-primary/25 transition-colors outline-none hover:bg-primary/90 focus-visible:ring-3 focus-visible:ring-ring/50 active:translate-y-px",
+        "inline-flex h-12.5 shrink-0 items-center justify-center gap-2 rounded-4xl bg-primary px-5 text-sm font-semibold whitespace-nowrap text-primary-foreground shadow-lg transition-colors outline-none hover:bg-primary/90 focus-visible:ring-3 focus-visible:ring-ring/50 active:translate-y-px",
         className
       )}
     >
       <ImageIcon weight="fill" className="size-5" />
-      Crear póster
+      <span className={labelClassName}>Póster</span>
     </Link>
   )
 }

@@ -1,6 +1,7 @@
 import type {
   ExpressionSpecification,
   LayerSpecification,
+  Map as MapLibreMap,
   StyleSpecification,
 } from "maplibre-gl"
 
@@ -14,17 +15,28 @@ import { BUILDING_3D_LAYER_ID, LABEL_LAYER_ID } from "./style"
  * In 3D the routes are MapLibre line layers rather than deck.gl ones:
  * MapLibre drapes its lines over the terrain, so they follow every slope and
  * hide behind the ridges like the streets do.
+ *
+ * Both themes' layers are always in the style and the theme only sets their
+ * opacity: MapLibre fades opacity along with the basemap, while colors picked
+ * per feature or along the line would jump at once.
  */
 export const ROUTES_3D_SOURCE = "routes-3d"
 export const SELECTION_3D_SOURCE = "selection-3d"
 export const FLYOVER_SOURCE = "flyover"
 
-/** Layer that answers clicks and hovers in 3D. */
-export const ROUTES_3D_PICK_LAYER = "routes-3d-core"
-export const SELECTION_3D_HALO = "selection-3d-halo"
-export const SELECTION_3D_CORE = "selection-3d-core"
+/** Layer that answers clicks and hovers in 3D, whatever the theme. */
+export const ROUTES_3D_PICK_LAYER = "routes-3d-core-light"
+
+const THEMES: Theme[] = ["dark", "light"]
 
 const PAPER: Record<Theme, string> = { dark: "#0b1716", light: "#fbf8f1" }
+
+/** Ids of the selected route's layers in one theme. */
+const selectionIds = (theme: Theme) => ({
+  halo: `selection-3d-halo-${theme}`,
+  core: `selection-3d-core-${theme}`,
+  ends: `selection-3d-ends-${theme}`,
+})
 
 type Stops = [zoom: number, value: number][]
 
@@ -84,7 +96,7 @@ export function progressGradient(
 }
 
 /** Colors of the selected route in 3D, shared with its animations. */
-export function selectionColors(color: string, theme: Theme) {
+function selectionColors(color: string, theme: Theme) {
   const dark = theme === "dark"
   const core = dark ? "#ffffff" : color
   const [r, g, b] = hexToRgb(core)
@@ -110,7 +122,8 @@ export interface Routes3dInput {
   fade?: number
   selection?: {
     coords: Float64Array
-    color: string
+    /** The route's sport color in each theme. */
+    colors: Record<Theme, string>
     /** Share of the route drawn so far while it draws itself in. */
     drawn?: number
   } | null
@@ -127,9 +140,10 @@ function routeLayers({
   hidden = false,
   fade: dim = 1,
 }: Routes3dInput): LayerSpecification[] {
-  const dark = theme === "dark"
   const layout = { ...ROUND, visibility: hidden ? "none" : "visible" } as const
-  const base = sportColorExpression(sports, theme, sportColors)
+  /** Opacity of a layer that belongs to `owner`: none in the other theme. */
+  const shown = (owner: Theme, opacity: number) =>
+    owner === theme ? opacity * dim : 0
   const line = (
     id: string,
     paint: NonNullable<Extract<LayerSpecification, { type: "line" }>["paint"]>
@@ -140,35 +154,22 @@ function routeLayers({
     layout,
     paint,
   })
-
-  if (dark) {
-    const glow: Stops = [
-      [8, 1.6],
-      [12, 3],
-      [15, 8],
-      [18, 20],
-    ]
-    return [
-      line("routes-3d-glow", {
-        "line-color": base,
-        "line-width": byZoom(glow),
-        "line-blur": byZoom(scaled(glow, 0.7)),
-        "line-opacity": 0.22 * dim,
-      }),
-      line(ROUTES_3D_PICK_LAYER, {
-        "line-color": sportColorExpression(sports, theme, sportColors, 0.35),
-        "line-width": byZoom([
-          [8, 0.5],
-          [12, 0.9],
-          [15, 1.7],
-          [18, 3.6],
-        ]),
-        "line-opacity": 0.9 * dim,
-      }),
-    ]
-  }
+  const glow: Stops = [
+    [8, 1.6],
+    [12, 3],
+    [15, 8],
+    [18, 20],
+  ]
 
   return [
+    // Night: a soft glow under thin, whitened lines.
+    line("routes-3d-glow", {
+      "line-color": sportColorExpression(sports, "dark", sportColors),
+      "line-width": byZoom(glow),
+      "line-blur": byZoom(scaled(glow, 0.7)),
+      "line-opacity": shown("dark", 0.22),
+    }),
+    // Day: a paper casing under the sport color.
     line("routes-3d-casing", {
       "line-color": PAPER.light,
       "line-width": byZoom([
@@ -177,28 +178,42 @@ function routeLayers({
         [15, 4.6],
         [18, 9],
       ]),
-      "line-opacity": 0.85 * dim,
+      "line-opacity": shown("light", 0.85),
     }),
     line(ROUTES_3D_PICK_LAYER, {
-      "line-color": base,
+      "line-color": sportColorExpression(sports, "light", sportColors),
       "line-width": byZoom([
         [8, 0.8],
         [12, 1.3],
         [15, 2.2],
         [18, 4.4],
       ]),
-      "line-opacity": 0.92 * dim,
+      "line-opacity": shown("light", 0.92),
+    }),
+    line("routes-3d-core-dark", {
+      "line-color": sportColorExpression(sports, "dark", sportColors, 0.35),
+      "line-width": byZoom([
+        [8, 0.5],
+        [12, 0.9],
+        [15, 1.7],
+        [18, 3.6],
+      ]),
+      "line-opacity": shown("dark", 0.9),
     }),
   ]
 }
 
+/** The selected route as one theme paints it, faded out in the other. */
 function selectionLayers(
   color: string,
+  owner: Theme,
   theme: Theme,
   drawn = 1
 ): LayerSpecification[] {
-  const dark = theme === "dark"
-  const colors = selectionColors(color, theme)
+  const dark = owner === "dark"
+  const on = owner === theme
+  const colors = selectionColors(color, owner)
+  const ids = selectionIds(owner)
   const halo: Stops = dark
     ? [
         [10, 10],
@@ -217,7 +232,7 @@ function selectionLayers(
   ] as ExpressionSpecification
   return [
     {
-      id: SELECTION_3D_HALO,
+      id: ids.halo,
       type: "line",
       source: SELECTION_3D_SOURCE,
       filter: lines,
@@ -226,11 +241,11 @@ function selectionLayers(
         "line-gradient": progressGradient(colors.halo, drawn),
         "line-width": byZoom(halo),
         "line-blur": dark ? byZoom(scaled(halo, 0.6)) : 0,
-        "line-opacity": dark ? 0.5 : 1,
+        "line-opacity": on ? (dark ? 0.5 : 1) : 0,
       },
     },
     {
-      id: SELECTION_3D_CORE,
+      id: ids.core,
       type: "line",
       source: SELECTION_3D_SOURCE,
       filter: lines,
@@ -242,21 +257,51 @@ function selectionLayers(
           [14, 3.5],
           [18, 7],
         ]),
+        "line-opacity": on ? 1 : 0,
       },
     },
     {
-      id: "selection-3d-ends",
+      id: ids.ends,
       type: "circle",
       source: SELECTION_3D_SOURCE,
       filter: ["==", ["geometry-type"], "Point"],
       paint: {
         "circle-radius": 5.5,
         "circle-color": ["case", ["get", "start"], color, colors.paper],
+        "circle-opacity": on ? 1 : 0,
         "circle-stroke-width": 2,
         "circle-stroke-color": dark ? "#ffffff" : color,
+        "circle-stroke-opacity": on ? 1 : 0,
       },
     },
   ]
+}
+
+/**
+ * Lights the selected route up to `share` of its length, in both themes'
+ * layers. `ahead` keeps the stretch still to fly faintly visible.
+ */
+export function paintSelection(
+  map: MapLibreMap,
+  colors: Record<Theme, string>,
+  share: number,
+  ahead = false
+) {
+  for (const theme of THEMES) {
+    const ids = selectionIds(theme)
+    if (!map.getLayer(ids.core)) continue
+    const tint = selectionColors(colors[theme], theme)
+    map.setPaintProperty(
+      ids.halo,
+      "line-gradient",
+      progressGradient(tint.halo, share)
+    )
+    map.setPaintProperty(
+      ids.core,
+      "line-gradient",
+      progressGradient(tint.core, share, ahead ? tint.ahead : undefined)
+    )
+  }
 }
 
 function flyoverLayers(color: string, theme: Theme): LayerSpecification[] {
@@ -356,19 +401,18 @@ export function withRoutes3d(
       data: selectionGeoJSON(input.selection.coords),
       lineMetrics: true,
     }
-    added.push(
-      ...selectionLayers(
-        input.selection.color,
-        input.theme,
-        input.selection.drawn
-      )
+    const { colors, drawn } = input.selection
+    // Halos first, so neither theme's halo covers the other's line mid-fade.
+    const [night, day] = THEMES.map((owner) =>
+      selectionLayers(colors[owner], owner, input.theme, drawn)
     )
+    added.push(night[0], day[0], day[1], night[1], day[2], night[2])
     if (input.flyoverStart) {
       sources[FLYOVER_SOURCE] = {
         type: "geojson",
         data: pointGeoJSON(input.flyoverStart),
       }
-      added.push(...flyoverLayers(input.selection.color, input.theme))
+      added.push(...flyoverLayers(colors[input.theme], input.theme))
     }
   }
 

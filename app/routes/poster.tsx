@@ -5,6 +5,7 @@ import { RoutesLoader } from "~/components/loader/routes-loader"
 import { PosterStudio } from "~/components/poster/poster-studio"
 import { useActivities } from "~/lib/activities-api"
 import { filtersFromSearch } from "~/lib/filters-url"
+import { parseBBox } from "~/lib/poster"
 import type { SportColors } from "~/lib/sports"
 import { requireStravaAccount } from "~/lib/supabase/server"
 
@@ -28,6 +29,8 @@ export default function Poster({ loaderData }: Route.ComponentProps) {
   const { activities, failed } = useActivities()
   const [params] = useSearchParams()
   const filters = useMemo(() => filtersFromSearch(params), [params])
+  const view = useMemo(() => parseBBox(params.get("encuadre")), [params])
+  const routeId = Number(params.get("ruta")) || null
 
   if (failed) {
     return (
@@ -45,6 +48,8 @@ export default function Poster({ loaderData }: Route.ComponentProps) {
     <PosterStudio
       activities={activities}
       filters={filters}
+      routeId={routeId}
+      view={view}
       sportColors={loaderData.sportColors}
     />
   )
