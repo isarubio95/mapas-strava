@@ -1,5 +1,6 @@
 import {
   GearIcon,
+  MoonIcon,
   ShieldCheckIcon,
   SignOutIcon,
   UserIcon,
@@ -8,6 +9,7 @@ import { Link, useSubmit } from "react-router"
 
 import {
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuGroup,
   DropdownMenuItem,
@@ -16,6 +18,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "~/components/ui/dropdown-menu"
+import { useTheme } from "~/lib/theme"
 import { cn } from "~/lib/utils"
 
 export interface Account {
@@ -25,12 +28,16 @@ export interface Account {
 
 export function AccountMenu({
   account,
+  themeToggle = false,
   className,
 }: {
   account: Account
+  /** Adds the day/night toggle, for screens with no room for the switch. */
+  themeToggle?: boolean
   className?: string
 }) {
   const submit = useSubmit()
+  const { theme, setTheme } = useTheme()
 
   return (
     <DropdownMenu>
@@ -47,7 +54,7 @@ export function AccountMenu({
           <UserIcon
             weight="fill"
             aria-hidden
-            className="absolute inset-0 size-5 [clip-path:circle(0%_at_50%_50%)] transition-[clip-path] duration-300 ease-(--ease-out-expo) group-aria-expanded/account:[clip-path:circle(75%_at_50%_50%)] group-aria-expanded/account:duration-500 motion-reduce:transition-none"
+            className="absolute inset-0 size-5 transition-[clip-path] duration-300 ease-(--ease-out-expo) [clip-path:circle(0%_at_50%_50%)] group-aria-expanded/account:duration-500 group-aria-expanded/account:[clip-path:circle(75%_at_50%_50%)] motion-reduce:transition-none"
           />
         </span>
       </DropdownMenuTrigger>
@@ -71,6 +78,18 @@ export function AccountMenu({
           <ShieldCheckIcon weight="fill" />
           Privacidad
         </DropdownMenuLinkItem>
+        {themeToggle && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuCheckboxItem
+              checked={theme === "dark"}
+              onCheckedChange={(dark) => setTheme(dark ? "dark" : "light")}
+            >
+              <MoonIcon weight="fill" />
+              Modo oscuro
+            </DropdownMenuCheckboxItem>
+          </>
+        )}
         <DropdownMenuSeparator />
         <DropdownMenuItem
           onClick={() => submit(null, { method: "post", action: "/salir" })}

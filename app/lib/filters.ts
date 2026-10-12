@@ -32,6 +32,20 @@ export const EMPTY_FILTERS: Filters = {
   near: null,
 }
 
+/**
+ * How many filters narrow the map: sports, dates, distance, place and nearby
+ * point count once each, however many of their fields are set.
+ */
+export function activeFilterCount(filters: Filters) {
+  return [
+    filters.sports != null,
+    filters.from != null || filters.to != null,
+    filters.minKm != null || filters.maxKm != null,
+    filters.zone != null,
+    filters.near != null,
+  ].filter(Boolean).length
+}
+
 export const NEAR_RADII = [100, 250, 500, 1000, 2000] as const
 
 const DAY_MS = 86_400_000

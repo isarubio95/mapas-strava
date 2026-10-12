@@ -2,8 +2,6 @@ import { haversine } from "~/lib/geo"
 
 /** Seconds a route takes to draw itself from start to finish. */
 export const REVEAL_DRAW = 1.3
-/** Seconds the bright head trails behind the tip of a drawing route. */
-export const REVEAL_HEAD = 0.14
 /** Seconds the selected route takes to draw itself. */
 export const SELECTION_DRAW = 0.9
 /** Routes start within this many seconds of each other, so they flow rather than march. */
@@ -80,12 +78,12 @@ export class RouteReveal {
 
   /** Clock time when the last route has finished drawing. */
   get finishesAt() {
-    return this.origin + this.end + REVEAL_HEAD
+    return this.origin + this.end
   }
 
   /** Seconds on the reveal clock, held still once everything is drawn. */
   time(now: number) {
-    return Math.min(now - this.origin, Math.max(this.end + REVEAL_HEAD, 0))
+    return Math.min(now - this.origin, Math.max(this.end, 0))
   }
 
   drawing(now: number) {

@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest"
 import {
   drawTimes,
   REVEAL_DRAW,
-  REVEAL_HEAD,
   RouteReveal,
   visiblePaths,
 } from "./reveal"
@@ -68,7 +67,7 @@ describe("route reveal", () => {
     reveal.update(new Uint8Array([1, 1]), 10, true)
     const end = reveal.time(reveal.finishesAt)
     expect(reveal.time(reveal.finishesAt + 60)).toBe(end)
-    expect(end).toBeGreaterThan(REVEAL_DRAW + REVEAL_HEAD - 0.01)
+    expect(end).toBeGreaterThan(REVEAL_DRAW - 0.01)
   })
 })
 

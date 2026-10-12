@@ -1,20 +1,22 @@
 import {
+  CaretUpIcon,
+  ClockCountdownIcon,
+  FireIcon,
   ImageIcon,
-  SidebarSimpleIcon,
+  MountainsIcon,
+  PathIcon,
   SlidersHorizontalIcon,
-  SquaresFourIcon,
-  RowsIcon,
 } from "@phosphor-icons/react"
 import {
   useCallback,
   useEffect,
   useMemo,
   useState,
+  type ComponentProps,
   type ReactNode,
 } from "react"
 import { Link, useSearchParams } from "react-router"
 
-import { Logo } from "~/components/logo"
 import { FlyoverHud } from "~/components/map/flyover-hud"
 import { MapCanvas } from "~/components/map/map-canvas"
 import type { MapMode, Padding } from "~/components/map/route-map"
@@ -26,7 +28,6 @@ import { SportsRail } from "~/components/shell/sports-rail"
 import { Stats } from "~/components/shell/stats"
 import { Timeline } from "~/components/shell/timeline"
 import { ThemeSwitch } from "~/components/theme-switch"
-import { Button } from "~/components/ui/button"
 import {
   Drawer,
   DrawerContent,
@@ -35,10 +36,16 @@ import {
   DrawerTitle,
   DrawerTrigger,
 } from "~/components/ui/drawer"
-import { ScrollArea } from "~/components/ui/scroll-area"
-import { Segmented, type SegmentedItem } from "~/components/ui/segmented"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from "~/components/ui/dropdown-menu"
+import type { SegmentedItem } from "~/components/ui/segmented"
 import { filtersFromSearch, filtersToSearch } from "~/lib/filters-url"
-import type { Filters, NearPoint } from "~/lib/filters"
+import { activeFilterCount, type Filters, type NearPoint } from "~/lib/filters"
 import type { BBox } from "~/lib/geo"
 import type { DatasetMeta, Histogram, Summary } from "~/lib/map/engine"
 import { createFlyoverProgress } from "~/lib/map/flyover"
@@ -55,35 +62,10 @@ import {
 import { sportColor, sportsByUse, type SportColors } from "~/lib/sports"
 import { cn } from "~/lib/utils"
 
-const LAYOUT_KEY = "trazo-layout"
-
-export type LayoutId = "hud" | "sidebar" | "dock"
-
-const LAYOUTS: {
-  id: LayoutId
-  label: string
-  hint: string
-  icon: typeof SquaresFourIcon
-}[] = [
-  {
-    id: "hud",
-    label: "HUD",
-    hint: "Paneles sobre el mapa",
-    icon: SquaresFourIcon,
-  },
-  {
-    id: "sidebar",
-    label: "Barra",
-    hint: "Filtros a un lado",
-    icon: SidebarSimpleIcon,
-  },
-  { id: "dock", label: "Dock", hint: "Mapa y poco más", icon: RowsIcon },
-]
-
 /** Room around a route shown alone, clear of the panels of each layout. */
 const FOCUS_PADDING: Record<"desktop" | "mobile", Padding> = {
-  // The detail panel sits bottom right.
-  desktop: { top: 112, bottom: 96, left: 112, right: 420 },
+  // The detail panel sits bottom right, above the control bar.
+  desktop: { top: 96, bottom: 112, left: 112, right: 420 },
   // The detail panel covers the lower half.
   mobile: { top: 88, bottom: 470, left: 32, right: 32 },
 }
@@ -109,6 +91,11 @@ const HIDE_WHILE_FLYING =
 
 const NO_ZONES: Zone[] = []
 
+/** Timeline days that go by per second of playback at 1×. */
+const PLAYBACK_DAYS = 7
+/** Seconds each route takes to trace itself during playback, at any speed. */
+const PLAYBACK_DRAW = 1.6
+
 /** Whether a key press happened while typing, so shortcuts stay out of the way. */
 function typing(target: EventTarget | null) {
   return (
@@ -116,12 +103,6 @@ function typing(target: EventTarget | null) {
     (target.isContentEditable ||
       ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName))
   )
-}
-
-function readLayout(): LayoutId {
-  if (typeof window === "undefined") return "hud"
-  const stored = window.localStorage.getItem(LAYOUT_KEY)
-  return stored === "sidebar" || stored === "dock" ? stored : "hud"
 }
 
 /**
@@ -148,22 +129,22 @@ export function MapApp({
   const { theme } = useTheme()
   const resolved = theme ?? "light"
   const mobile = useMediaQuery("(max-width: 767px)")
+  const smallPhone = useMediaQuery("(max-width: 375px)")
   const [params, setParams] = useSearchParams()
   const filters = useMemo(() => filtersFromSearch(params), [params])
   const mode = modeFromParam(params.get("vista"))
   const selectedId = params.get("ruta") ? Number(params.get("ruta")) : null
   const focused = selectedId != null && params.get("solo") === "1"
   const [searchOpen, setSearchOpen] = useState(false)
-  const [layout, setLayout] = useState<LayoutId>("hud")
   const [summary, setSummary] = useState<Summary | null>(null)
   const [meta, setMeta] = useState<DatasetMeta | null>(null)
   const [timeline, setTimeline] = useState<Histogram | null>(null)
   const [pickingPoint, setPickingPoint] = useState(false)
-  const [filtersOpen, setFiltersOpen] = useState(false)
   const [overlapped, setOverlapped] = useState<number[]>([])
   const [playing, setPlaying] = useState(false)
   const [speed, setSpeed] = useState(4)
   const [playDay, setPlayDay] = useState<number | null>(null)
+  const playbackDrawDays = speed * PLAYBACK_DAYS * PLAYBACK_DRAW
   const [heatRadius, setHeatRadius] = useState(28)
   const [flying, setFlying] = useState(false)
   const [flyoverProgress] = useState(createFlyoverProgress)
@@ -263,10 +244,6 @@ export function MapApp({
     return () => window.removeEventListener("keydown", onKey)
   }, [])
 
-  useEffect(() => {
-    setLayout(readLayout())
-  }, [])
-
   // The flight follows the selected route in 3D; anything else ends it.
   useEffect(() => {
     setFlying(false)
@@ -295,9 +272,10 @@ export function MapApp({
     if (!playing || meta?.firstDay == null || meta.lastDay == null) return
     let frame = 0
     let last = performance.now()
-    const end = meta.lastDay + 1
+    // Runs on past the last day so the latest routes finish tracing.
+    const end = meta.lastDay + 1 + playbackDrawDays
     const tick = (now: number) => {
-      const step = ((now - last) / 1000) * speed * 7
+      const step = ((now - last) / 1000) * speed * PLAYBACK_DAYS
       last = now
       setPlayDay((current) => {
         const next = (current ?? meta.firstDay!) + step
@@ -311,7 +289,7 @@ export function MapApp({
     }
     frame = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(frame)
-  }, [playing, speed, meta])
+  }, [playing, speed, playbackDrawDays, meta])
 
   const sports = useMemo(
     () => sportsByUse(activities.map((activity) => activity.sportType)),
@@ -339,11 +317,6 @@ export function MapApp({
       Boolean(activity)
     )
 
-  const choose = (id: LayoutId) => {
-    setLayout(id)
-    window.localStorage.setItem(LAYOUT_KEY, id)
-  }
-
   const onPickPoint = (point: { lng: number; lat: number }) => {
     const previous: NearPoint | null = filters.near
     setFilters({
@@ -353,7 +326,12 @@ export function MapApp({
     setPickingPoint(false)
   }
 
-  const accountMenu = account ? <AccountMenu account={account} /> : null
+  // On small phones the theme moves into the account menu, and the figures
+  // fill the room it leaves with their icons.
+  const themeInMenu = smallPhone && account != null
+  const accountMenu = account ? (
+    <AccountMenu account={account} themeToggle={themeInMenu} />
+  ) : null
 
   // The poster opens on what the map shows: the selected route, or the
   // filtered routes framed like the map.
@@ -391,166 +369,122 @@ export function MapApp({
     >
       <h1 className="sr-only">Mapa de Trazo</h1>
       {banner}
-      <div className="flex h-full">
-        {layout === "sidebar" && !mobile && (
-          <aside
-            className={cn(
-              "panel z-10 m-3 mt-34 flex w-[22rem] shrink-0 flex-col rounded-4xl lg:mt-20",
-              HIDE_WHILE_FLYING
-            )}
-          >
-            <ScrollArea className="min-h-0 flex-1 p-4">
-              <SportsRail
-                sports={sports}
-                filters={filters}
-                onChange={setFilters}
-                theme={resolved}
-                orientation="horizontal"
-              />
-              <div className="mt-5">
-                <FiltersForm {...chrome} />
-              </div>
-            </ScrollArea>
-            <div className="border-t border-panel-border px-4 py-3">
-              <Stats summary={summary} />
-            </div>
-          </aside>
-        )}
-
-        <div className="relative min-h-0 min-w-0 flex-1">
-          <MapCanvas
-            activities={activities}
-            filters={filters}
-            theme={resolved}
-            sportColors={sportColors}
-            mode={mode}
-            labels
-            selectedId={selectedId}
-            focused={focused}
-            focusPadding={FOCUS_PADDING[mobile ? "mobile" : "desktop"]}
-            onSelect={selectRoute}
-            pickingPoint={pickingPoint}
-            onPickPoint={onPickPoint}
-            onSummary={onSummary}
-            playbackTime={playDay ?? meta?.firstDay ?? 0}
-            heatmapRadius={heatRadius}
-            flyover={flying}
-            onFlyoverProgress={flyoverProgress.set}
-            onFlyoverEnd={stopFlying}
-            onViewChange={setView}
-          />
-          {flying && selected && (
-            <div className="pointer-events-none absolute inset-x-0 bottom-4 z-30 flex animate-in justify-center px-3 duration-500 fade-in-0 slide-in-from-bottom-4 md:bottom-6">
-              <FlyoverHud
-                activity={selected}
-                color={sportColor(selected.sportType, resolved, sportColors)}
-                profile={profile?.id === selected.id ? profile.data : null}
-                progress={flyoverProgress}
-                onStop={stopFlying}
-              />
-            </div>
-          )}
-          <div
-            className={cn(
-              "pointer-events-none absolute inset-x-0 bottom-36 z-30 flex flex-col items-end gap-3 px-4 md:bottom-28",
-              HIDE_WHILE_FLYING
-            )}
-          >
-            {mode === "heatmap" && (
-              <label className="panel pointer-events-auto flex items-center gap-3 rounded-4xl px-4 py-2 text-sm">
-                Radio
-                <input
-                  type="range"
-                  min={8}
-                  max={80}
-                  value={heatRadius}
-                  aria-label="Radio del mapa de calor"
-                  onChange={(event) =>
-                    setHeatRadius(Number(event.target.value))
-                  }
-                />
-              </label>
-            )}
-            {mode === "playback" && (
-              <Timeline
-                histogram={timeline}
-                day={playDay ?? meta?.firstDay ?? 0}
-                playing={playing}
-                speed={speed}
-                onDay={(day) => {
-                  setPlaying(false)
-                  setPlayDay(day)
-                }}
-                onPlaying={setPlaying}
-                onSpeed={setSpeed}
-              />
-            )}
-            {selected && (
-              <DetailPanel
-                activity={selected}
-                overlapped={overlappedActivities}
-                profile={profile?.id === selected.id ? profile.data : null}
-                profileLoading={profile?.id !== selected.id}
-                theme={resolved}
-                focused={focused}
-                onFocus={(on) => setFocused(on)}
-                onFlyover={
-                  mode === "relief" && !reducedMotion
-                    ? () => setFlying(true)
-                    : undefined
-                }
-                onSelect={(id) => selectRoute(id, overlapped)}
-                onClose={() => selectRoute(null)}
-              />
-            )}
+      <div className="relative h-full">
+        <MapCanvas
+          activities={activities}
+          filters={filters}
+          theme={resolved}
+          sportColors={sportColors}
+          mode={mode}
+          labels
+          selectedId={selectedId}
+          focused={focused}
+          focusPadding={FOCUS_PADDING[mobile ? "mobile" : "desktop"]}
+          onSelect={selectRoute}
+          pickingPoint={pickingPoint}
+          onPickPoint={onPickPoint}
+          onSummary={onSummary}
+          playbackTime={playDay ?? meta?.firstDay ?? 0}
+          playbackDrawDays={playbackDrawDays}
+          heatmapRadius={heatRadius}
+          flyover={flying}
+          onFlyoverProgress={flyoverProgress.set}
+          onFlyoverEnd={stopFlying}
+          onViewChange={setView}
+        />
+        {flying && selected && (
+          <div className="pointer-events-none absolute inset-x-0 bottom-4 z-30 flex animate-in justify-center px-3 duration-500 fade-in-0 slide-in-from-bottom-4 md:bottom-6">
+            <FlyoverHud
+              activity={selected}
+              color={sportColor(selected.sportType, resolved, sportColors)}
+              profile={profile?.id === selected.id ? profile.data : null}
+              progress={flyoverProgress}
+              onStop={stopFlying}
+            />
           </div>
-
-          {layout === "hud" && !mobile && (
-            <HudChrome
-              {...chrome}
-              sports={sports}
-              theme={resolved}
-              summary={summary}
+        )}
+        <div
+          className={cn(
+            "pointer-events-none absolute inset-x-0 bottom-36 z-30 flex flex-col items-end gap-3 px-3 md:bottom-28 md:px-4",
+            HIDE_WHILE_FLYING
+          )}
+        >
+          {mode === "heatmap" && (
+            <label className="panel pointer-events-auto flex items-center gap-3 rounded-4xl px-4 py-2 text-sm">
+              Radio
+              <input
+                type="range"
+                min={8}
+                max={80}
+                value={heatRadius}
+                aria-label="Radio del mapa de calor"
+                onChange={(event) => setHeatRadius(Number(event.target.value))}
+              />
+            </label>
+          )}
+          {mode === "playback" && (
+            <Timeline
+              histogram={timeline}
+              day={Math.min(
+                playDay ?? meta?.firstDay ?? 0,
+                (meta?.lastDay ?? Infinity) + 1
+              )}
+              playing={playing}
+              speed={speed}
+              onDay={(day) => {
+                setPlaying(false)
+                setPlayDay(day)
+              }}
+              onPlaying={setPlaying}
+              onSpeed={setSpeed}
             />
           )}
-
-          {layout === "dock" && !mobile && (
-            <DockChrome
-              {...chrome}
-              sports={sports}
+          {selected && (
+            <DetailPanel
+              activity={selected}
+              overlapped={overlappedActivities}
+              profile={profile?.id === selected.id ? profile.data : null}
+              profileLoading={profile?.id !== selected.id}
               theme={resolved}
-              summary={summary}
-              filtersOpen={filtersOpen}
-              onFiltersOpen={setFiltersOpen}
-            />
-          )}
-
-          {mobile && (
-            <MobileChrome
-              {...chrome}
-              sports={sports}
-              theme={resolved}
-              summary={summary}
-              mode={mode}
-              onMode={setMode}
-              accountMenu={accountMenu}
-              posterHref={posterHref}
+              focused={focused}
+              onFocus={(on) => setFocused(on)}
+              onFlyover={
+                mode === "relief" && !reducedMotion
+                  ? () => setFlying(true)
+                  : undefined
+              }
+              onSelect={(id) => selectRoute(id, overlapped)}
+              onClose={() => selectRoute(null)}
             />
           )}
         </div>
-      </div>
 
-      {!mobile && (
-        <TopBar
-          layout={layout}
-          onLayout={choose}
-          mode={mode}
-          onMode={setMode}
-          onSearch={openSearch}
-          accountMenu={accountMenu}
-          posterHref={posterHref}
-        />
-      )}
+        {mobile ? (
+          <MobileChrome
+            {...chrome}
+            sports={sports}
+            theme={resolved}
+            summary={summary}
+            mode={mode}
+            onMode={setMode}
+            accountMenu={accountMenu}
+            themeInMenu={themeInMenu}
+            posterHref={posterHref}
+          />
+        ) : (
+          <>
+            <TopBar summary={summary} accountMenu={accountMenu} />
+            <ControlBar
+              {...chrome}
+              sports={sports}
+              theme={resolved}
+              mode={mode}
+              onMode={setMode}
+              posterHref={posterHref}
+            />
+          </>
+        )}
+      </div>
 
       <RouteSearch
         open={searchOpen}
@@ -565,109 +499,91 @@ export function MapApp({
   )
 }
 
-function HudChrome({
-  sports,
-  filters,
-  onChange,
-  theme,
+/**
+ * Desktop top bar: theme on the left, what the map shows, in figures, in the
+ * middle, and the account on the right.
+ */
+function TopBar({
   summary,
-  pickingPoint,
-  onPickPoint,
-  maxKm,
-  places,
+  accountMenu,
 }: {
-  sports: string[]
-  filters: Filters
-  onChange: (filters: Filters) => void
-  theme: "light" | "dark"
   summary: Summary | null
-  pickingPoint: boolean
-  onPickPoint: () => void
-  maxKm: number
-  places: VisitedZone[]
+  accountMenu: ReactNode
 }) {
   return (
-    <div
+    <header
       className={cn(
-        "pointer-events-none absolute inset-0 z-10 hidden md:flex",
+        "pointer-events-none absolute inset-x-4 top-4 z-20 grid grid-cols-[1fr_auto_1fr] items-center gap-3",
         HIDE_WHILE_FLYING
       )}
     >
-      <div className="flex w-full flex-col justify-between p-4 pt-20">
-        <div className="flex items-start">
-          {sports.length > 0 && (
-            <div className="panel pointer-events-auto rounded-4xl p-2">
-              <SportsRail
-                sports={sports}
-                filters={filters}
-                onChange={onChange}
-                theme={theme}
-                orientation="vertical"
-              />
-            </div>
-          )}
-        </div>
-        <div className="flex items-end justify-between gap-3">
-          <div className="panel pointer-events-auto max-h-[46vh] w-[22rem] overflow-auto rounded-4xl p-4">
-            <FiltersForm
-              filters={filters}
-              onChange={onChange}
-              pickingPoint={pickingPoint}
-              onPickPoint={onPickPoint}
-              maxKm={maxKm}
-              places={places}
-            />
-          </div>
-          <div className="panel pointer-events-auto rounded-4xl px-4 py-3">
-            <Stats summary={summary} />
-          </div>
-        </div>
+      <ThemeSwitch className="pointer-events-auto h-12.5 justify-self-start" />
+      <div className="panel flex h-12.5 items-center rounded-4xl px-5">
+        <Stats summary={summary} compact />
       </div>
-    </div>
+      <div className="pointer-events-auto flex items-center justify-self-end">
+        {accountMenu}
+      </div>
+    </header>
   )
 }
 
-function DockChrome({
+/**
+ * Desktop control bar along the bottom: filters, search, map mode and the
+ * poster. The filters open in a panel above it that stays put while a point
+ * is picked on the map.
+ */
+function ControlBar({
   sports,
   filters,
   onChange,
   theme,
-  summary,
   pickingPoint,
   onPickPoint,
   maxKm,
   places,
-  filtersOpen,
-  onFiltersOpen,
+  onSearch,
+  mode,
+  onMode,
+  posterHref,
 }: {
   sports: string[]
   filters: Filters
   onChange: (filters: Filters) => void
   theme: "light" | "dark"
-  summary: Summary | null
   pickingPoint: boolean
   onPickPoint: () => void
   maxKm: number
   places: VisitedZone[]
-  filtersOpen: boolean
-  onFiltersOpen: (open: boolean) => void
+  onSearch: () => void
+  mode: MapMode
+  onMode: (mode: MapMode) => void
+  posterHref: string
 }) {
-  const chips: string[] = []
-  if (filters.sports?.length) chips.push(`${filters.sports.length} deportes`)
-  if (filters.from) chips.push(filters.from.slice(0, 4))
-  if (filters.zone) chips.push("lugar")
-  if (filters.near) chips.push("cerca")
+  const [filtersOpen, setFiltersOpen] = useState(false)
+
+  useEffect(() => {
+    if (!filtersOpen) return
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setFiltersOpen(false)
+    }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [filtersOpen])
 
   return (
     <div
       className={cn(
-        "pointer-events-none absolute inset-0 z-10 hidden flex-col justify-end p-4 pt-20 md:flex",
+        "pointer-events-none absolute inset-x-4 bottom-4 z-20 flex justify-center",
         HIDE_WHILE_FLYING
       )}
     >
-      <div className="flex flex-col items-center gap-3">
+      <div className="flex flex-col items-start gap-3">
         {filtersOpen && (
-          <div className="panel pointer-events-auto max-h-[50vh] w-[24rem] overflow-auto rounded-4xl p-4">
+          <div
+            id="filtros"
+            className="panel pointer-events-auto max-h-[50vh] w-[24rem] animate-in overflow-auto rounded-4xl p-4 duration-200 fade-in-0 slide-in-from-bottom-2"
+          >
             <SportsRail
               sports={sports}
               filters={filters}
@@ -687,87 +603,51 @@ function DockChrome({
             </div>
           </div>
         )}
-        <div className="panel pointer-events-auto flex items-center gap-1 rounded-4xl p-1.5">
-          <Button
-            type="button"
-            size="icon-lg"
-            variant={filtersOpen ? "default" : "ghost"}
+        <div className="pointer-events-auto flex items-center gap-2">
+          <FiltersButton
+            filters={filters}
             aria-expanded={filtersOpen}
-            aria-label="Filtros"
-            className="rounded-4xl"
-            onClick={() => onFiltersOpen(!filtersOpen)}
-          >
-            <SquaresFourIcon weight="fill" />
-          </Button>
-          {chips.length > 0 && (
-            <p className="pl-2 text-xs text-muted-foreground">
-              {chips.join(" · ")}
-            </p>
-          )}
-          <div className="px-3">
-            <Stats summary={summary} compact />
-          </div>
+            aria-controls="filtros"
+            onClick={() => setFiltersOpen((open) => !open)}
+          />
+          <RouteSearchButton onClick={onSearch} />
+          <ModeMenu mode={mode} onMode={onMode} />
+          <PosterLink to={posterHref} />
         </div>
       </div>
     </div>
   )
 }
 
-/**
- * Desktop top bar shared by every layout: brand and layout picker on the left,
- * the map's main actions in the middle, theme and account on the right. Below
- * `lg` the middle group drops to a second row.
- */
-function TopBar({
-  layout,
-  onLayout,
-  mode,
-  onMode,
-  onSearch,
-  accountMenu,
-  posterHref,
-}: {
-  layout: LayoutId
-  onLayout: (layout: LayoutId) => void
-  mode: MapMode
-  onMode: (mode: MapMode) => void
-  onSearch: () => void
-  accountMenu: ReactNode
-  posterHref: string
+/** Opens the filters, with how many are narrowing the map. */
+function FiltersButton({
+  filters,
+  className,
+  labelClassName,
+  ...props
+}: ComponentProps<"button"> & {
+  filters: Filters
+  labelClassName?: string
 }) {
+  const count = activeFilterCount(filters)
   return (
-    <header
+    <button
+      type="button"
       className={cn(
-        "pointer-events-none absolute inset-x-4 top-4 z-20 grid grid-cols-2 items-center gap-x-3 gap-y-2 lg:grid-cols-[1fr_auto_1fr]",
-        HIDE_WHILE_FLYING
+        "group/filters panel inline-flex h-12.5 shrink-0 items-center justify-center gap-2 rounded-4xl px-4 text-sm font-medium transition-colors outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 aria-expanded:bg-primary aria-expanded:text-primary-foreground",
+        className
       )}
+      {...props}
     >
-      <div className="pointer-events-auto flex items-center gap-2 justify-self-start">
-        <Logo className="px-1" />
-        <nav aria-label="Distribución">
-          <Segmented
-            items={LAYOUTS.map((item) => ({
-              value: item.id,
-              label: item.label,
-              title: item.hint,
-              icon: item.icon,
-            }))}
-            value={layout}
-            onChange={onLayout}
-            labelClassName="sr-only xl:not-sr-only"
-          />
-        </nav>
-      </div>
-      <div className="pointer-events-auto col-span-2 row-start-2 flex items-center gap-2 justify-self-center lg:col-span-1 lg:col-start-2 lg:row-start-1">
-        <RouteSearchButton onClick={onSearch} />
-        <PosterLink to={posterHref} />
-        <ModeToggle mode={mode} onMode={onMode} />
-      </div>
-      <div className="pointer-events-auto col-start-2 row-start-1 flex items-center gap-2 justify-self-end lg:col-start-3">
-        <ThemeSwitch className="h-12.5" />
-        {accountMenu}
-      </div>
-    </header>
+      <SlidersHorizontalIcon weight="bold" className="size-5" />
+      <span className={labelClassName}>Filtros</span>
+      {count > 0 && (
+        <span className="grid size-5 place-items-center rounded-full bg-primary text-[0.6875rem] font-semibold text-primary-foreground tabular-nums group-aria-expanded/filters:bg-primary-foreground group-aria-expanded/filters:text-primary">
+          {count}
+          <span className="sr-only"> activos</span>
+        </span>
+      )}
+    </button>
   )
 }
 
@@ -785,6 +665,7 @@ function MobileChrome({
   onMode,
   onSearch,
   accountMenu,
+  themeInMenu,
   posterHref,
 }: {
   sports: string[]
@@ -800,6 +681,8 @@ function MobileChrome({
   onMode: (mode: MapMode) => void
   onSearch: () => void
   accountMenu: ReactNode
+  /** The theme lives in the account menu, so the figures take its room. */
+  themeInMenu: boolean
   posterHref: string
 }) {
   return (
@@ -809,38 +692,39 @@ function MobileChrome({
         HIDE_WHILE_FLYING
       )}
     >
-      <div className="flex items-start justify-between">
-        <Logo className="pointer-events-auto h-12.5 px-1" />
-        <div className="pointer-events-auto flex items-center gap-3">
-          <RouteSearchButton variant="icon" onClick={onSearch} />
-          <ThemeSwitch className="h-12.5" />
-          {accountMenu}
+      {/* Theme, figures and account, as on desktop. On small phones the theme
+          moves into the account menu and the figures, now with icons, take
+          its room. If they still don't fit, the last one wraps out of sight. */}
+      <div className="flex items-center gap-2">
+        {!themeInMenu && <ThemeSwitch className="pointer-events-auto h-12.5" />}
+        <div className="panel @container flex h-12.5 min-w-0 flex-1 items-center justify-center rounded-4xl px-4">
+          <Stats
+            summary={summary}
+            compact
+            icons={themeInMenu}
+            className={cn(
+              "h-7 min-w-0 flex-wrap gap-x-2.5 overflow-hidden [&_dd]:text-base",
+              themeInMenu && "gap-x-2"
+            )}
+          />
         </div>
+        {accountMenu && (
+          <div className="pointer-events-auto shrink-0">{accountMenu}</div>
+        )}
       </div>
-      {/* Stats + filters and the poster button share one row. Below 384px
-          of row the poster button collapses to its icon, and if the stats
-          still don't fit, the last figure wraps out of sight. */}
-      <div className="@container mx-auto flex w-full max-w-lg items-center gap-2">
+      {/* Controls share one row. Below 384px of row the poster button
+          collapses to its icon, and below 320px so does Filtros. */}
+      <div className="@container pointer-events-none mx-auto flex w-full max-w-lg items-center justify-center gap-2">
         <Drawer>
           <DrawerTrigger
             render={
-              <button
-                type="button"
-                className="panel pointer-events-auto flex min-w-0 flex-1 items-center justify-between gap-2 rounded-4xl py-3 pr-3.5 pl-4 text-left"
+              <FiltersButton
+                filters={filters}
+                className="pointer-events-auto @max-[20rem]:px-3"
+                labelClassName="@max-[20rem]:sr-only"
               />
             }
-          >
-            <Stats
-              summary={summary}
-              compact
-              className="h-7 min-w-0 flex-wrap gap-x-2.5 overflow-hidden [&_dd]:text-base"
-            />
-            <SlidersHorizontalIcon
-              weight="bold"
-              className="size-4 shrink-0 text-muted-foreground"
-            />
-            <span className="sr-only">Filtros</span>
-          </DrawerTrigger>
+          />
           <DrawerContent>
             <DrawerHeader>
               <DrawerTitle>Filtros</DrawerTitle>
@@ -865,12 +749,15 @@ function MobileChrome({
                   places={places}
                 />
               </div>
-              <div className="mt-4">
-                <ModeToggle mode={mode} onMode={onMode} />
-              </div>
             </div>
           </DrawerContent>
         </Drawer>
+        <RouteSearchButton
+          variant="icon"
+          onClick={onSearch}
+          className="pointer-events-auto shrink-0"
+        />
+        <ModeMenu mode={mode} onMode={onMode} />
         <PosterLink
           to={posterHref}
           className="pointer-events-auto @max-[24rem]:w-12.5 @max-[24rem]:px-0"
@@ -906,18 +793,63 @@ function PosterLink({
 }
 
 const MODES: SegmentedItem<MapMode>[] = [
-  { value: "routes", label: "Rutas" },
-  { value: "heatmap", label: "Calor" },
-  { value: "playback", label: "Tiempo" },
-  { value: "relief", label: "3D", title: "Relieve en 3D" },
+  { value: "routes", label: "Rutas", icon: PathIcon },
+  { value: "heatmap", label: "Calor", icon: FireIcon },
+  { value: "playback", label: "Tiempo", icon: ClockCountdownIcon },
+  { value: "relief", label: "3D", title: "Relieve en 3D", icon: MountainsIcon },
 ]
 
-function ModeToggle({
+/** Delay between the menu's options as they slide in one after another. */
+const MENU_STAGGER_MS = 30
+
+/**
+ * The map modes as a menu that opens upwards. The caret flips while it is
+ * open, the panel rises into place and the options slide in staggered.
+ */
+function ModeMenu({
   mode,
   onMode,
 }: {
   mode: MapMode
   onMode: (mode: MapMode) => void
 }) {
-  return <Segmented items={MODES} value={mode} onChange={onMode} />
+  const current = MODES.find((item) => item.value === mode) ?? MODES[0]
+  const CurrentIcon = current.icon
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        aria-label={`Modo de mapa: ${current.label}`}
+        className="group/mode panel pointer-events-auto inline-flex h-12.5 shrink-0 items-center gap-1.5 rounded-4xl pr-3 pl-4 text-sm font-medium outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+      >
+        {CurrentIcon && <CurrentIcon weight="fill" className="size-4" />}
+        {current.label}
+        <CaretUpIcon
+          weight="bold"
+          className="size-4 text-muted-foreground group-aria-expanded/mode:rotate-180 motion-safe:transition-transform motion-safe:duration-200 motion-safe:ease-in-out"
+        />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
+        side="top"
+        sideOffset={8}
+        className="w-48 data-[side=bottom]:[--menu-from:-10px] motion-safe:data-open:animate-menu-in! motion-safe:data-closed:animate-menu-out!"
+      >
+        <DropdownMenuRadioGroup
+          value={mode}
+          onValueChange={(value) => onMode(value as MapMode)}
+        >
+          {MODES.map(({ value, label, title, icon: ItemIcon }, index) => (
+            <DropdownMenuRadioItem
+              key={value}
+              value={value}
+              className="motion-safe:animate-menu-item-in"
+              style={{ animationDelay: `${index * MENU_STAGGER_MS}ms` }}
+            >
+              {ItemIcon && <ItemIcon weight="fill" />}
+              {title ?? label}
+            </DropdownMenuRadioItem>
+          ))}
+        </DropdownMenuRadioGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
 }

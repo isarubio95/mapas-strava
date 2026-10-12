@@ -7,7 +7,6 @@ import {
   Mesh,
   NormalBlending,
   PerspectiveCamera,
-  Points,
   Scene,
   ShaderMaterial,
   Shape,
@@ -32,8 +31,6 @@ export interface LoaderScene {
 
 /** Seconds the camera takes to pull back from home to the whole city. */
 const PULL_BACK = 26
-/** Seconds the bright head trails behind the tip of a drawing route. */
-const HEAD = 0.35
 const FOV = 38
 const PAPER = "#fbf8f1"
 
@@ -98,10 +95,8 @@ const RIBBON_FRAGMENT = /* glsl */ `
   uniform float uSoft;
   #ifdef ROUTE
     uniform float uTime;
-    uniform float uHead;
     uniform float uWhiten;
     uniform float uTint;
-    uniform float uHeadBoost;
     varying float vTime;
     varying vec3 vColor;
   #endif
@@ -113,10 +108,7 @@ const RIBBON_FRAGMENT = /* glsl */ `
     vec3 color = uColor;
     #ifdef ROUTE
       if (vTime > uTime) discard;
-      float head = 1.0 - smoothstep(0.0, uHead, uTime - vTime);
       color = mix(uColor, mix(vColor, vec3(1.0), uWhiten), uTint);
-      color = mix(color, vec3(1.0), head * 0.55 * uTint);
-      alpha *= 1.0 + head * uHeadBoost;
     #endif
     gl_FragColor = vec4(color, min(alpha, 1.0));
   }
@@ -137,50 +129,6 @@ const FILL_FRAGMENT = /* glsl */ `
   varying float vFade;
   void main() {
     gl_FragColor = vec4(uColor, vFade);
-  }
-`
-
-/** The bright dot at the tip of each route as it draws. */
-const HEAD_VERTEX = /* glsl */ `
-  attribute vec3 aColor;
-  attribute float aAlpha;
-  uniform float uSize;
-  uniform float uDpr;
-  varying vec3 vColor;
-  varying float vAlpha;
-  ${FADE}
-  void main() {
-    vec4 center = modelViewMatrix * vec4(position, 1.0);
-    vColor = aColor;
-    vAlpha = aAlpha * fade(position.xy, -center.z);
-    gl_PointSize = uSize * uDpr;
-    gl_Position = projectionMatrix * center;
-  }
-`
-
-const HEAD_FRAGMENT = /* glsl */ `
-  uniform float uGlow;
-  uniform vec3 uPaper;
-  varying vec3 vColor;
-  varying float vAlpha;
-  void main() {
-    float r = length(gl_PointCoord * 2.0 - 1.0);
-    if (r > 1.0) discard;
-    vec3 color;
-    float alpha;
-    if (uGlow > 0.5) {
-      // Night: white-hot core in a colored glow.
-      float core = 1.0 - smoothstep(0.14, 0.24, r);
-      float glow = pow(1.0 - r, 2.4);
-      color = mix(vColor, vec3(1.0), core);
-      alpha = max(core, glow * 0.7);
-    } else {
-      // Day: an ink dot on a paper ring.
-      float dot = 1.0 - smoothstep(0.24, 0.32, r);
-      color = mix(uPaper, vColor, dot);
-      alpha = 1.0 - smoothstep(0.42, 0.5, r);
-    }
-    gl_FragColor = vec4(color, alpha * vAlpha);
   }
 `
 
@@ -297,27 +245,6 @@ function drawTimes(route: CityRoute) {
   return out
 }
 
-/** Where the tip of a route is at `time`, by distance along it. */
-function headAt(route: CityRoute, time: number, out: Vector2) {
-  const u = Math.min(1, Math.max(0, (time - route.start) / route.duration))
-  const { distances, points } = route
-  const target = Math.sin((u * Math.PI) / 2) * distances[distances.length - 1]
-  let lo = 0
-  let hi = distances.length - 1
-  while (hi - lo > 1) {
-    const mid = (lo + hi) >> 1
-    if (distances[mid] <= target) lo = mid
-    else hi = mid
-  }
-  const span = distances[hi] - distances[lo] || 1
-  const t = Math.min(1, Math.max(0, (target - distances[lo]) / span))
-  return out.set(
-    points[lo * 2] + (points[hi * 2] - points[lo * 2]) * t,
-    points[lo * 2 + 1] + (points[hi * 2 + 1] - points[lo * 2 + 1]) * t
-  )
-}
-
-const MAX_HEADS = 96
 
 /**
  * Loading screen: a city like the real map, tilted in 3D, filling up with
@@ -358,13 +285,6 @@ export function createLoaderScene(
   let theme = initialTheme
   let reduced = initialReduced
   let content: Group | null = null
-  let heads: {
-    geometry: BufferGeometry
-    position: Float32Array
-    color: Float32Array
-    alpha: Float32Array
-  } | null = null
-  let routeColors: Vector3[] = []
 
   const materials: ShaderMaterial[] = []
   const geometries: BufferGeometry[] = []
@@ -386,10 +306,8 @@ export function createLoaderScene(
         uMaxPx: { value: options.maxPx },
         uOpacity: { value: options.opacity },
         uSoft: { value: options.soft ?? 0 },
-        uHead: { value: HEAD },
         uWhiten: { value: theme === "dark" ? 0.35 : 0 },
         uTint: { value: options.color ? 0 : 1 },
-        uHeadBoost: { value: theme === "dark" ? 1.6 : 0 },
       },
       transparent: true,
       depthTest: false,
@@ -496,7 +414,7 @@ export function createLoaderScene(
       )
     )
 
-    routeColors = city.routes.map((route) =>
+    const routeColors = city.routes.map((route) =>
       rgb(sportColor(route.sport, theme))
     )
     const routes = ribbonGeometry(
@@ -549,40 +467,6 @@ export function createLoaderScene(
       )
     }
 
-    const headGeometry = new BufferGeometry()
-    const headPosition = new Float32Array(MAX_HEADS * 3)
-    const headColor = new Float32Array(MAX_HEADS * 3)
-    const headAlpha = new Float32Array(MAX_HEADS)
-    headGeometry.setAttribute("position", new BufferAttribute(headPosition, 3))
-    headGeometry.setAttribute("aColor", new BufferAttribute(headColor, 3))
-    headGeometry.setAttribute("aAlpha", new BufferAttribute(headAlpha, 1))
-    headGeometry.setDrawRange(0, 0)
-    geometries.push(headGeometry)
-    const headMaterial = new ShaderMaterial({
-      vertexShader: HEAD_VERTEX,
-      fragmentShader: HEAD_FRAGMENT,
-      uniforms: {
-        ...shared,
-        uSize: { value: dark ? 22 : 11 },
-        uGlow: { value: dark ? 1 : 0 },
-        uPaper: { value: rgb(PAPER) },
-      },
-      transparent: true,
-      depthTest: false,
-      depthWrite: false,
-      blending: dark ? AdditiveBlending : NormalBlending,
-    })
-    materials.push(headMaterial)
-    const headPoints = new Points(headGeometry, headMaterial)
-    headPoints.renderOrder = 7
-    headPoints.frustumCulled = false
-    group.add(headPoints)
-    heads = {
-      geometry: headGeometry,
-      position: headPosition,
-      color: headColor,
-      alpha: headAlpha,
-    }
 
     content = group
     pivot.add(group)
@@ -591,7 +475,6 @@ export function createLoaderScene(
   function teardown() {
     if (content) pivot.remove(content)
     content = null
-    heads = null
     for (const material of materials) material.dispose()
     for (const geometry of geometries) geometry.dispose()
     materials.length = 0
@@ -613,36 +496,7 @@ export function createLoaderScene(
   const observer = new ResizeObserver(resize)
   observer.observe(canvas)
 
-  const tip = new Vector2()
   let elapsed = 0
-
-  function updateHeads(time: number) {
-    if (!heads) return
-    let count = 0
-    if (!reduced) {
-      for (let r = 0; r < city.routes.length && count < MAX_HEADS; r++) {
-        const route = city.routes[r]
-        if (route.start > time) break
-        const age = time - route.start
-        const end = route.duration
-        // Fade in as the route starts, and out a moment after it arrives.
-        const alpha =
-          Math.min(1, age / 0.15) *
-          (1 - Math.min(1, Math.max(0, (age - end) / 0.6)))
-        if (alpha <= 0) continue
-        headAt(route, time, tip)
-        heads.position.set([tip.x, tip.y, 0], count * 3)
-        const c = routeColors[r]
-        heads.color.set([c.x, c.y, c.z], count * 3)
-        heads.alpha[count] = alpha
-        count++
-      }
-    }
-    heads.geometry.setDrawRange(0, count)
-    for (const name of ["position", "aColor", "aAlpha"]) {
-      heads.geometry.getAttribute(name).needsUpdate = true
-    }
-  }
 
   function frame(time: number) {
     const u = reduced ? 1 : easeInOut(time / PULL_BACK)
@@ -667,7 +521,6 @@ export function createLoaderScene(
     shared.uFogNear.value = distance * 0.85
     shared.uFogFar.value = distance * 2.1
     shared.uTime.value = reduced ? 1e6 : time
-    updateHeads(time)
   }
 
   function render() {

@@ -11,7 +11,7 @@ import { sportColor, type SportColors } from "~/lib/sports"
 import type { Theme } from "~/lib/theme"
 
 import type { RouteGeometry } from "./engine"
-import { drawTimes, REVEAL_HEAD, SELECTION_DRAW } from "./reveal"
+import { drawTimes, SELECTION_DRAW } from "./reveal"
 
 type Rgba = [number, number, number, number]
 
@@ -135,10 +135,6 @@ export interface RevealFrame {
   /** Bumped whenever `times` changes. */
   version: number
   currentTime: number
-  /** Some route is drawing right now. */
-  drawing: boolean
-  /** Routes animate when they appear, so the head layer stays ready. */
-  animated: boolean
 }
 
 export interface RouteLayersInput {
@@ -158,7 +154,7 @@ export interface RouteLayersInput {
 
 /**
  * All filtered routes, drawn as a neon glow (dark) or ink line (light).
- * Routes that appear draw themselves from start to finish behind a soft head.
+ * Routes that appear draw themselves from start to finish.
  */
 export function routeLayers({
   geometry,
@@ -200,25 +196,6 @@ export function routeLayers({
       getTimestamps: [reveal.times, reveal.version],
     },
   }
-  const head = reveal.animated
-    ? [
-        new TripsLayer({
-          ...shared,
-          id: "routes-head",
-          getColor: colorAccessor(colors.core),
-          updateTriggers: { ...shared.updateTriggers, getColor: [colors.core] },
-          fadeTrail: true,
-          trailLength: REVEAL_HEAD,
-          widthScale: dark ? 7 : 6,
-          widthMinPixels: dark ? 2 : 2.2,
-          widthMaxPixels: dark ? 4.5 : 4.2,
-          opacity: (dark ? 0.35 : 0.3) * dim,
-          parameters: dark ? ADDITIVE : OVER,
-          visible: reveal.drawing,
-        }),
-      ]
-    : []
-
   if (dark) {
     return [
       new TripsLayer({
@@ -249,7 +226,6 @@ export function routeLayers({
         autoHighlight: pickable,
         highlightColor: [255, 255, 255, 230],
       }),
-      ...head,
     ]
   }
 
@@ -278,7 +254,6 @@ export function routeLayers({
       autoHighlight: pickable,
       highlightColor: [20, 32, 30, 230],
     }),
-    ...head,
   ]
 }
 
@@ -381,15 +356,13 @@ export interface PlaybackInput {
   dayRange: [number, number]
   timestamps: Float32Array
   currentTime: number
-  /** Days a route takes to draw itself; the flash trails behind it. */
-  drawDays: number
   theme: Theme
   beforeId?: string
 }
 
 const tripsCache = new WeakMap<Float32Array, BinaryPaths>()
 
-/** Routes appear in chronological order, each with a short bright flash. */
+/** Routes appear in chronological order, each drawing itself from start to finish. */
 export function playbackLayers({
   geometry,
   colors,
@@ -397,7 +370,6 @@ export function playbackLayers({
   dayRange,
   timestamps,
   currentTime,
-  drawDays,
   theme,
   beforeId,
 }: PlaybackInput): Layer[] {
@@ -449,21 +421,6 @@ export function playbackLayers({
       widthMaxPixels: dark ? 1.6 : 2.2,
       opacity: 0.9,
       parameters: OVER,
-    }),
-    new TripsLayer({
-      ...shared,
-      id: "playback-flash",
-      getColor: dark
-        ? ([255, 255, 255, 255] as Color)
-        : colorAccessor(colors.core),
-      updateTriggers: { ...shared.updateTriggers, getColor: [dark, colors.core] },
-      fadeTrail: true,
-      trailLength: drawDays * 1.6,
-      widthScale: 14,
-      widthMinPixels: 2.5,
-      widthMaxPixels: 7,
-      opacity: dark ? 0.55 : 0.4,
-      parameters: dark ? ADDITIVE : OVER,
     }),
   ]
 }

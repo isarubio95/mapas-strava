@@ -577,7 +577,6 @@ export function RouteMap({
             ...shared,
             timestamps,
             currentTime: playbackTime,
-            drawDays: playbackDrawDays,
           })
         )
       } else {
@@ -588,8 +587,6 @@ export function RouteMap({
               times: reveal.times,
               version: revealVersion,
               currentTime: reveal.time(now),
-              drawing: reveal.drawing(now),
-              animated: animate,
             },
             dimmed: selectedId != null,
           })
@@ -627,7 +624,6 @@ export function RouteMap({
     heatPoints,
     timestamps,
     playbackTime,
-    playbackDrawDays,
     heatmapRadius,
     heatmapIntensity,
     selection,

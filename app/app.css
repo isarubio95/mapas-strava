@@ -41,6 +41,10 @@
   --color-background: var(--background);
   --color-panel: var(--panel);
   --color-panel-border: var(--panel-border);
+  --color-stat-distance: var(--stat-distance);
+  --color-stat-time: var(--stat-time);
+  --color-stat-routes: var(--stat-routes);
+  --color-stat-climb: var(--stat-climb);
   --color-glow: var(--glow);
   --color-tile: var(--tile);
   --color-tile-edge: var(--tile-edge);
@@ -53,6 +57,9 @@
   --radius-4xl: calc(var(--radius) * 2.6);
   --ease-spring: cubic-bezier(0.34, 1.4, 0.64, 1);
   --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --animate-menu-in: menu-in 200ms ease-out both;
+  --animate-menu-out: menu-out 150ms ease-in both;
+  --animate-menu-item-in: menu-item-in 200ms ease-out both;
 }
 
 /* Day: cream and sand, deep green accent. */
@@ -94,6 +101,11 @@
   --panel: rgb(255 252 245 / 0.84);
   --panel-border: rgb(30 43 39 / 0.1);
   --glow: rgb(15 122 79 / 0.28);
+  /* Icons next to the map's figures. */
+  --stat-distance: #0f7a4f;
+  --stat-time: #c4831f;
+  --stat-routes: #2f78b0;
+  --stat-climb: #b5523b;
   /* Sport icon tiles (icons.png). */
   --tile: linear-gradient(180deg, #fffdf8 0%, #f2ebdc 100%);
   --tile-edge: rgb(30 43 39 / 0.08);
@@ -136,6 +148,10 @@
   --panel: rgb(10 24 22 / 0.74);
   --panel-border: rgb(94 242 166 / 0.16);
   --glow: rgb(94 242 166 / 0.35);
+  --stat-distance: #5ef2a6;
+  --stat-time: #ffc85c;
+  --stat-routes: #4fd8f0;
+  --stat-climb: #ff8a6b;
   --tile: linear-gradient(180deg, #1c2523 0%, #0f1513 100%);
   --tile-edge: rgb(255 255 255 / 0.08);
 }
@@ -197,6 +213,30 @@
   }
   to {
     stroke-dashoffset: 0;
+  }
+}
+
+/* Dropdown menus: the panel travels 10px towards its trigger's far side with
+   a slight zoom (`--menu-from`: +10px opening upwards, -10px downwards), and
+   the options slide in from the left one after another. */
+@keyframes menu-in {
+  from {
+    opacity: 0;
+    transform: translateY(var(--menu-from, 10px)) scale(0.95);
+  }
+}
+
+@keyframes menu-out {
+  to {
+    opacity: 0;
+    transform: translateY(var(--menu-from, 10px)) scale(0.95);
+  }
+}
+
+@keyframes menu-item-in {
+  from {
+    opacity: 0;
+    transform: translateX(-20px);
   }
 }
 
