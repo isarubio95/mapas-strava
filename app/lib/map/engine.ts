@@ -29,7 +29,10 @@ export interface DatasetMeta {
   firstDay: number | null
   lastDay: number | null
   sports: { type: string; count: number }[]
+  /** Activities passing through each zone. */
   zones: { id: string; count: number }[]
+  /** Activities starting in each zone. */
+  startZones: { id: string; count: number }[]
   maxKm: number
 }
 
@@ -118,6 +121,7 @@ export class RouteEngine {
     lastDay: null,
     sports: [],
     zones: [],
+    startZones: [],
     maxKm: 0,
   }
 
@@ -135,6 +139,7 @@ export class RouteEngine {
     let maxKm = 0
     const sports = new Map<string, number>()
     const zones = new Map<string, number>()
+    const startZones = new Map<string, number>()
 
     for (let i = 0; i < n; i++) {
       const activity = activities[i]
@@ -146,6 +151,8 @@ export class RouteEngine {
       sports.set(activity.sportType, (sports.get(activity.sportType) ?? 0) + 1)
       for (const zone of activity.zones)
         zones.set(zone, (zones.get(zone) ?? 0) + 1)
+      for (const zone of activity.startZones)
+        startZones.set(zone, (startZones.get(zone) ?? 0) + 1)
 
       if (!activity.polyline) continue
       const coords = decodePolyline(activity.polyline)
@@ -224,6 +231,9 @@ export class RouteEngine {
         .sort(byCount)
         .map(([type, count]) => ({ type, count })),
       zones: [...zones].sort(byCount).map(([id, count]) => ({ id, count })),
+      startZones: [...startZones]
+        .sort(byCount)
+        .map(([id, count]) => ({ id, count })),
       maxKm: Math.ceil(maxKm),
     }
 
@@ -379,6 +389,35 @@ export class RouteEngine {
       }
     }
     return Float32Array.from(out)
+  }
+
+  /**
+   * The routes that pass the filters, dates included, as GeoJSON text for
+   * MapLibre to drape over the 3D terrain. Each line carries its activity id
+   * (`a`) and sport (`s`).
+   */
+  routesGeoJSON(filters: Filters) {
+    const match = this.matchStatic(filters)
+    const from = filters.from ? dayNumber(filters.from) : -Infinity
+    const to = filters.to ? dayNumber(filters.to) : Infinity
+    const pos = this.positions
+    // Polylines carry five decimals; more would only bloat the text.
+    const round = (value: number) => Math.round(value * 1e5) / 1e5
+    const features: string[] = []
+
+    for (let p = 0; p < this.pathActivity.length; p++) {
+      const i = this.pathActivity[p]
+      if (!match[i] || this.days[i] < from || this.days[i] > to) continue
+      const activity = this.activities[i]
+      const coords: string[] = []
+      for (let v = this.startIndices[p]; v < this.startIndices[p + 1]; v++) {
+        coords.push(`[${round(pos[v * 2])},${round(pos[v * 2 + 1])}]`)
+      }
+      features.push(
+        `{"type":"Feature","properties":{"a":${activity.id},"s":${JSON.stringify(activity.sportType)}},"geometry":{"type":"LineString","coordinates":[${coords.join(",")}]}}`
+      )
+    }
+    return `{"type":"FeatureCollection","features":[${features.join(",")}]}`
   }
 
   /**

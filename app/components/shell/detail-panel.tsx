@@ -1,4 +1,4 @@
-import { CrosshairSimpleIcon, XIcon } from "@phosphor-icons/react"
+import { CrosshairSimpleIcon, DroneIcon, XIcon } from "@phosphor-icons/react"
 
 import { Button } from "~/components/ui/button"
 import type { Activity } from "~/lib/activities"
@@ -13,6 +13,7 @@ export function DetailPanel({
   theme,
   focused,
   onFocus,
+  onFlyover,
   onSelect,
   onClose,
 }: {
@@ -23,6 +24,8 @@ export function DetailPanel({
   /** Only this route is on the map. */
   focused: boolean
   onFocus: (focused: boolean) => void
+  /** Flies the camera along the route; only offered in 3D. */
+  onFlyover?: () => void
   onSelect: (id: number) => void
   onClose: () => void
 }) {
@@ -54,6 +57,17 @@ export function DetailPanel({
 
       {profile && profile.altitude.length > 1 && (
         <Elevation distance={profile.distance} altitude={profile.altitude} color={color} />
+      )}
+
+      {onFlyover && activity.polyline && (
+        <Button
+          type="button"
+          className="mt-4 h-10 w-full rounded-4xl"
+          onClick={onFlyover}
+        >
+          <DroneIcon data-icon="inline-start" weight="fill" />
+          Recorrer en 3D
+        </Button>
       )}
 
       {overlapped.length > 1 && (

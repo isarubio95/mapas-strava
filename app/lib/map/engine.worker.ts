@@ -30,6 +30,9 @@ const api = {
     const points = engine.heatPoints(filters, spacing)
     return transfer(points, [points.buffer])
   },
+  routesGeoJSON(filters: Filters) {
+    return engine.routesGeoJSON(filters)
+  },
   timestamps(drawDays: number) {
     const values = engine.timestamps(drawDays)
     return transfer(values, [values.buffer])

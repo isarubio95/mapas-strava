@@ -4,6 +4,7 @@ import { decodePolyline } from "~/lib/polyline"
 import {
   generateActivities,
   syntheticStreams,
+  SYNTHETIC_ZONES,
 } from "../../tests/fixtures/synthetic"
 
 import type { Route } from "./+types/prototipos"
@@ -27,5 +28,11 @@ async function demoProfile(
 }
 
 export default function Prototipos() {
-  return <MapApp activities={DEMO} loadProfile={demoProfile} />
+  return (
+    <MapApp
+      activities={DEMO}
+      zones={SYNTHETIC_ZONES}
+      loadProfile={demoProfile}
+    />
+  )
 }

@@ -1,0 +1,33 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - banner [ref=e3]:
+      - link "Trazo, inicio" [ref=e4] [cursor=pointer]:
+        - /url: /
+        - generic [ref=e5]: Trazo
+      - switch "Modo oscuro" [ref=e12] [cursor=pointer]
+    - main [ref=e35]:
+      - generic [ref=e36]:
+        - generic [ref=e37]:
+          - generic [ref=e38]:
+            - generic [ref=e39]: Entra en Trazo
+            - generic [ref=e40]: Todas tus rutas, en un solo mapa.
+          - generic [ref=e43]:
+            - group [ref=e44]:
+              - generic [ref=e45]: Correo electrónico
+              - textbox "Correo electrónico" [ref=e46]:
+                - /placeholder: tu@correo.com
+            - group [ref=e47]:
+              - generic [ref=e48]:
+                - generic [ref=e49]: Contraseña
+                - link "¿La has olvidado?" [ref=e50] [cursor=pointer]:
+                  - /url: /recuperar
+              - textbox "Contraseña" [ref=e51]
+            - button "Entrar" [ref=e52] [cursor=pointer]
+        - generic [ref=e53]:
+          - text: ¿No tienes cuenta?
+          - link "Crear cuenta" [ref=e54] [cursor=pointer]:
+            - /url: /registro
+    - contentinfo [ref=e55]:
+      - link "Privacidad" [ref=e56] [cursor=pointer]:
+        - /url: /privacidad
+  - region "Notifications alt+T"

@@ -78,7 +78,13 @@ const SPORTS: SportSpec[] = [
   { type: "Run", share: 0.32, steps: [9, 24], speed: 20, loops: 0.85 },
   { type: "Walk", share: 0.12, steps: [5, 12], speed: 14, loops: 0.9 },
   { type: "Hike", share: 0.08, steps: [10, 20], speed: 15, loops: 0.6 },
-  { type: "MountainBikeRide", share: 0.12, steps: [18, 40], speed: 28, loops: 0.6 },
+  {
+    type: "MountainBikeRide",
+    share: 0.12,
+    steps: [18, 40],
+    speed: 28,
+    loops: 0.6,
+  },
 ]
 
 interface Edge {
@@ -135,11 +141,17 @@ export function generateCity(seed = 7, routeCount = 420): City {
 
   const phase = Array.from({ length: 8 }, () => rng() * Math.PI * 2)
   const warp = (x: number, y: number): [number, number] => [
-    x + 2.4 * Math.sin(y * 0.061 + phase[0]) + 0.9 * Math.sin(y * 0.17 + phase[1]),
-    y + 2.4 * Math.sin(x * 0.053 + phase[2]) + 0.9 * Math.sin(x * 0.19 + phase[3]),
+    x +
+      2.4 * Math.sin(y * 0.061 + phase[0]) +
+      0.9 * Math.sin(y * 0.17 + phase[1]),
+    y +
+      2.4 * Math.sin(x * 0.053 + phase[2]) +
+      0.9 * Math.sin(x * 0.19 + phase[3]),
   ]
   const riverY = (x: number) =>
-    -0.3 * ey + 6 * Math.sin(x * 0.045 + phase[4]) + 2.5 * Math.sin(x * 0.11 + phase[5])
+    -0.3 * ey +
+    6 * Math.sin(x * 0.045 + phase[4]) +
+    2.5 * Math.sin(x * 0.11 + phase[5])
 
   // Lattice nodes, jittered but not yet warped.
   const nodeCount = COLS * ROWS
@@ -180,7 +192,14 @@ export function generateCity(seed = 7, routeCount = 420): City {
   const diagonal = Math.round(center[0] - center[1])
 
   const edges: Edge[] = []
-  const addEdge = (ia: number, ja: number, ib: number, jb: number, major: boolean) => {
+  const addEdge = (
+    ia: number,
+    ja: number,
+    ib: number,
+    jb: number,
+    major: boolean,
+    bridge = false
+  ) => {
     const a = index(ia, ja)
     const b = index(ib, jb)
     if (!alive[a] || !alive[b]) return
@@ -194,15 +213,15 @@ export function generateCity(seed = 7, routeCount = 420): City {
     const r = Math.hypot(mx / ex, my / ey)
     const path = onParkPath(ia, ja, ib, jb)
 
+    // The river is crossed only by the bridges added on purpose.
+    if (!bridge && Math.sign(ay - riverY(ax)) !== Math.sign(by - riverY(bx)))
+      return
+
     // Thinner towards the outskirts, as cities are.
     const drop = major
       ? 0.45 * smoothstep(0.85, 1.1, r)
       : 0.05 + 0.6 * smoothstep(0.5, 1.0, r)
-    if (rng() < drop) return
-
-    // Only some streets bridge the river.
-    const bridge = Math.sign(ay - riverY(ax)) !== Math.sign(by - riverY(bx))
-    if (bridge && !major && rng() > 0.25) return
+    if (!bridge && rng() < drop) return
 
     const kind: StreetKind = path ? "path" : major ? "major" : "minor"
     const bend = path ? between(rng, -1.2, 1.2) : 0
@@ -212,13 +231,19 @@ export function generateCity(seed = 7, routeCount = 420): City {
     for (let s = 0; s <= SUBDIVISIONS; s++) {
       const t = s / SUBDIVISIONS
       const lift = bend * Math.sin(Math.PI * t)
-      const [x, y] = warp(ax + (bx - ax) * t + nx * lift, ay + (by - ay) * t + ny * lift)
+      const [x, y] = warp(
+        ax + (bx - ax) * t + nx * lift,
+        ay + (by - ay) * t + ny * lift
+      )
       points[s * 2] = x
       points[s * 2 + 1] = y
     }
     const weight =
-      (kind === "major" ? 2.6 : kind === "path" ? 2.2 : 0.4 + 1.6 * rng() ** 2) *
-      (bridge ? 1.6 : 1)
+      (kind === "major"
+        ? 2.6
+        : kind === "path"
+          ? 2.2
+          : 0.4 + 1.6 * rng() ** 2) * (bridge ? 1.6 : 1)
     edges.push({ a, b, kind, points, weight })
   }
 
@@ -230,6 +255,26 @@ export function generateCity(seed = 7, routeCount = 420): City {
       if (i + 1 < COLS && j + 1 < ROWS && i - j === diagonal) {
         addEdge(i, j, i + 1, j + 1, true)
       }
+    }
+  }
+
+  // Bridges: no nodes survive on the water, so each one spans the gap between
+  // the last street on one bank and the first on the other. Every avenue gets
+  // one, and some side streets too.
+  for (let i = 0; i < COLS; i++) {
+    let south = -1
+    for (let j = 0; j < ROWS; j++) {
+      const k = index(i, j)
+      if (!alive[k]) continue
+      if (lattice[k * 2 + 1] < riverY(lattice[k * 2])) {
+        south = j
+        continue
+      }
+      const major = isMajorCol(i)
+      if (south >= 0 && j - south <= 2 && (major || rng() < 0.3)) {
+        addEdge(i, south, i, j, major, true)
+      }
+      break
     }
   }
 
@@ -254,7 +299,8 @@ export function generateCity(seed = 7, routeCount = 420): City {
   }
 
   const home = nearestNode(-1.5 * SPACING, 1.5 * SPACING)
-  const work = nearestNode(5 * SPACING, -0.5 * SPACING)
+  // Across the river, so routes cross the bridges and fill both banks.
+  const work = nearestNode(4 * SPACING, -6 * SPACING)
 
   // Routes only start where they can reach home.
   const reachable = new Uint8Array(nodeCount)
@@ -392,7 +438,7 @@ export function generateCity(seed = 7, routeCount = 420): City {
       duration: Math.min(4.2, Math.max(1.1, length / sport.speed)),
     })
     // Starts slowly, then the map fills faster and faster.
-    const rate = 4 + 9 * smoothstep(0, 22, clock)
+    const rate = 6 + 8 * smoothstep(0, 22, clock)
     clock += between(rng, 0.5, 1.5) / rate
   }
 

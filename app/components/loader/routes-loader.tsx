@@ -15,7 +15,11 @@ const currentTheme = (): Theme =>
  * fills up with routes. three.js loads on demand, so until it is ready (or
  * without WebGL) the screen is just the message on the map background.
  */
-export function RoutesLoader({ label = "Cargando tus rutas…" }: { label?: string }) {
+export function RoutesLoader({
+  label = "Cargando tus rutas…",
+}: {
+  label?: string
+}) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const sceneRef = useRef<LoaderScene | null>(null)
   const [ready, setReady] = useState(false)
@@ -26,18 +30,19 @@ export function RoutesLoader({ label = "Cargando tus rutas…" }: { label?: stri
     const canvas = canvasRef.current
     if (!canvas) return
     let cancelled = false
-    void import("./loader-scene").then(({ createLoaderScene }) => {
-      if (cancelled) return
-      try {
+    // Without WebGL, or if three.js fails to load, the message alone still
+    // says what is going on.
+    import("./loader-scene")
+      .then(({ createLoaderScene }) => {
+        if (cancelled) return
         sceneRef.current = createLoaderScene(canvas, {
           theme: currentTheme(),
-          reducedMotion: window.matchMedia("(prefers-reduced-motion: reduce)").matches,
+          reducedMotion: window.matchMedia("(prefers-reduced-motion: reduce)")
+            .matches,
         })
         setReady(true)
-      } catch {
-        // No WebGL: the message alone still says what is going on.
-      }
-    })
+      })
+      .catch(() => {})
     return () => {
       cancelled = true
       sceneRef.current?.dispose()

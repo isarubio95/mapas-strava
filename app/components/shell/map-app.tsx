@@ -15,6 +15,7 @@ import {
 import { Link, useSearchParams } from "react-router"
 
 import { Logo } from "~/components/logo"
+import { FlyoverHud } from "~/components/map/flyover-hud"
 import { MapCanvas } from "~/components/map/map-canvas"
 import type { MapMode, Padding } from "~/components/map/route-map"
 import { AccountMenu, type Account } from "~/components/shell/account-menu"
@@ -39,10 +40,17 @@ import { Segmented, type SegmentedItem } from "~/components/ui/segmented"
 import { filtersFromSearch, filtersToSearch } from "~/lib/filters-url"
 import type { Filters, NearPoint } from "~/lib/filters"
 import type { DatasetMeta, Histogram, Summary } from "~/lib/map/engine"
+import { createFlyoverProgress } from "~/lib/map/flyover"
 import { useMediaQuery } from "~/lib/use-media-query"
 import { useTheme } from "~/lib/theme"
-import type { Activity, ActivityProfile } from "~/lib/activities"
-import { sportsByUse, type SportColors } from "~/lib/sports"
+import {
+  visitedZones,
+  type Activity,
+  type ActivityProfile,
+  type VisitedZone,
+  type Zone,
+} from "~/lib/activities"
+import { sportColor, sportsByUse, type SportColors } from "~/lib/sports"
 import { cn } from "~/lib/utils"
 
 const LAYOUT_KEY = "trazo-layout"
@@ -78,6 +86,27 @@ const FOCUS_PADDING: Record<"desktop" | "mobile", Padding> = {
   mobile: { top: 88, bottom: 470, left: 32, right: 32 },
 }
 
+/** `?vista=` values for each map mode; the route view has none. */
+const VIEW_PARAM: Record<Exclude<MapMode, "routes">, string> = {
+  heatmap: "calor",
+  playback: "tiempo",
+  relief: "3d",
+}
+
+function modeFromParam(value: string | null): MapMode {
+  const found = Object.entries(VIEW_PARAM).find(([, param]) => param === value)
+  return found ? (found[0] as MapMode) : "routes"
+}
+
+/** Modes that show routes one by one, where a lone route makes sense. */
+const showsRoutes = (mode: MapMode) => mode === "routes" || mode === "relief"
+
+/** Panels step aside while the camera flies along a route in 3D. */
+const HIDE_WHILE_FLYING =
+  "transition-[opacity,visibility] duration-500 group-data-flying/app:invisible group-data-flying/app:opacity-0"
+
+const NO_ZONES: Zone[] = []
+
 /** Whether a key press happened while typing, so shortcuts stay out of the way. */
 function typing(target: EventTarget | null) {
   return (
@@ -104,8 +133,11 @@ export function MapApp({
   sportColors,
   loadProfile,
   account = null,
+  zones = NO_ZONES,
 }: {
   activities: Activity[]
+  /** Catalog of places the activities may be tagged with. */
+  zones?: Zone[]
   banner?: ReactNode
   sportColors?: SportColors
   loadProfile: (activity: Activity) => Promise<ActivityProfile | null>
@@ -116,12 +148,7 @@ export function MapApp({
   const mobile = useMediaQuery("(max-width: 767px)")
   const [params, setParams] = useSearchParams()
   const filters = useMemo(() => filtersFromSearch(params), [params])
-  const mode: MapMode =
-    params.get("vista") === "calor"
-      ? "heatmap"
-      : params.get("vista") === "tiempo"
-        ? "playback"
-        : "routes"
+  const mode = modeFromParam(params.get("vista"))
   const selectedId = params.get("ruta") ? Number(params.get("ruta")) : null
   const focused = selectedId != null && params.get("solo") === "1"
   const [searchOpen, setSearchOpen] = useState(false)
@@ -136,6 +163,9 @@ export function MapApp({
   const [speed, setSpeed] = useState(4)
   const [playDay, setPlayDay] = useState<number | null>(null)
   const [heatRadius, setHeatRadius] = useState(28)
+  const [flying, setFlying] = useState(false)
+  const [flyoverProgress] = useState(createFlyoverProgress)
+  const reducedMotion = useMediaQuery("(prefers-reduced-motion: reduce)")
   const [profile, setProfile] = useState<{
     id: number
     data: ActivityProfile | null
@@ -158,9 +188,9 @@ export function MapApp({
         (prev) => {
           const copy = new URLSearchParams(prev)
           if (next === "routes") copy.delete("vista")
-          else copy.set("vista", next === "heatmap" ? "calor" : "tiempo")
-          // A lone route only makes sense over the route view.
-          copy.delete("solo")
+          else copy.set("vista", VIEW_PARAM[next])
+          // A lone route only makes sense over the routes, flat or in 3D.
+          if (!showsRoutes(next)) copy.delete("solo")
           return copy
         },
         { replace: true, preventScrollReset: true }
@@ -197,7 +227,8 @@ export function MapApp({
           if (id != null) copy.set("ruta", String(id))
           if (on) {
             copy.set("solo", "1")
-            copy.delete("vista")
+            if (!showsRoutes(modeFromParam(copy.get("vista"))))
+              copy.delete("vista")
           } else copy.delete("solo")
           return copy
         },
@@ -232,6 +263,21 @@ export function MapApp({
   useEffect(() => {
     setLayout(readLayout())
   }, [])
+
+  // The flight follows the selected route in 3D; anything else ends it.
+  useEffect(() => {
+    setFlying(false)
+  }, [mode, selectedId])
+
+  useEffect(() => {
+    if (!flying) return
+    flyoverProgress.set(0)
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setFlying(false)
+    }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [flying, flyoverProgress])
 
   const onSummary = useCallback(
     (next: Summary, nextMeta: DatasetMeta, nextTimeline: Histogram | null) => {
@@ -308,22 +354,38 @@ export function MapApp({
 
   const openSearch = () => setSearchOpen(true)
 
+  const stopFlying = useCallback(() => setFlying(false), [])
+
+  const places = useMemo(
+    () => visitedZones(zones, meta?.zones ?? [], meta?.startZones ?? []),
+    [zones, meta]
+  )
+
   const chrome = {
     filters,
     onChange: setFilters,
     pickingPoint,
     onPickPoint: () => setPickingPoint((value) => !value),
     maxKm: meta?.maxKm ?? 200,
+    places,
     onSearch: openSearch,
   }
 
   return (
-    <main className="relative h-svh overflow-hidden bg-background">
+    <main
+      className="group/app relative h-svh overflow-hidden bg-background"
+      data-flying={flying || undefined}
+    >
       <h1 className="sr-only">Mapa de Trazo</h1>
       {banner}
       <div className="flex h-full">
         {layout === "sidebar" && !mobile && (
-          <aside className="panel z-10 m-3 mt-34 flex w-[22rem] shrink-0 flex-col rounded-4xl lg:mt-20">
+          <aside
+            className={cn(
+              "panel z-10 m-3 mt-34 flex w-[22rem] shrink-0 flex-col rounded-4xl lg:mt-20",
+              HIDE_WHILE_FLYING
+            )}
+          >
             <ScrollArea className="min-h-0 flex-1 p-4">
               <SportsRail
                 sports={sports}
@@ -359,8 +421,27 @@ export function MapApp({
             onSummary={onSummary}
             playbackTime={playDay ?? meta?.firstDay ?? 0}
             heatmapRadius={heatRadius}
+            flyover={flying}
+            onFlyoverProgress={flyoverProgress.set}
+            onFlyoverEnd={stopFlying}
           />
-          <div className="pointer-events-none absolute inset-x-0 bottom-36 z-30 flex flex-col items-end gap-3 px-4 md:bottom-28">
+          {flying && selected && (
+            <div className="pointer-events-none absolute inset-x-0 bottom-4 z-30 flex animate-in justify-center px-3 duration-500 fade-in-0 slide-in-from-bottom-4 md:bottom-6">
+              <FlyoverHud
+                activity={selected}
+                color={sportColor(selected.sportType, resolved, sportColors)}
+                profile={profile?.id === selected.id ? profile.data : null}
+                progress={flyoverProgress}
+                onStop={stopFlying}
+              />
+            </div>
+          )}
+          <div
+            className={cn(
+              "pointer-events-none absolute inset-x-0 bottom-36 z-30 flex flex-col items-end gap-3 px-4 md:bottom-28",
+              HIDE_WHILE_FLYING
+            )}
+          >
             {mode === "heatmap" && (
               <label className="panel pointer-events-auto flex items-center gap-3 rounded-4xl px-4 py-2 text-sm">
                 Radio
@@ -398,6 +479,11 @@ export function MapApp({
                 theme={resolved}
                 focused={focused}
                 onFocus={(on) => setFocused(on)}
+                onFlyover={
+                  mode === "relief" && !reducedMotion
+                    ? () => setFlying(true)
+                    : undefined
+                }
                 onSelect={(id) => selectRoute(id, overlapped)}
                 onClose={() => selectRoute(null)}
               />
@@ -471,6 +557,7 @@ function HudChrome({
   pickingPoint,
   onPickPoint,
   maxKm,
+  places,
 }: {
   sports: string[]
   filters: Filters
@@ -480,9 +567,15 @@ function HudChrome({
   pickingPoint: boolean
   onPickPoint: () => void
   maxKm: number
+  places: VisitedZone[]
 }) {
   return (
-    <div className="pointer-events-none absolute inset-0 z-10 hidden md:flex">
+    <div
+      className={cn(
+        "pointer-events-none absolute inset-0 z-10 hidden md:flex",
+        HIDE_WHILE_FLYING
+      )}
+    >
       <div className="flex w-full flex-col justify-between p-4 pt-20">
         <div className="flex items-start">
           {sports.length > 0 && (
@@ -505,6 +598,7 @@ function HudChrome({
               pickingPoint={pickingPoint}
               onPickPoint={onPickPoint}
               maxKm={maxKm}
+              places={places}
             />
           </div>
           <div className="panel pointer-events-auto rounded-4xl px-4 py-3">
@@ -525,6 +619,7 @@ function DockChrome({
   pickingPoint,
   onPickPoint,
   maxKm,
+  places,
   filtersOpen,
   onFiltersOpen,
 }: {
@@ -536,6 +631,7 @@ function DockChrome({
   pickingPoint: boolean
   onPickPoint: () => void
   maxKm: number
+  places: VisitedZone[]
   filtersOpen: boolean
   onFiltersOpen: (open: boolean) => void
 }) {
@@ -546,7 +642,12 @@ function DockChrome({
   if (filters.near) chips.push("cerca")
 
   return (
-    <div className="pointer-events-none absolute inset-0 z-10 hidden flex-col justify-end p-4 pt-20 md:flex">
+    <div
+      className={cn(
+        "pointer-events-none absolute inset-0 z-10 hidden flex-col justify-end p-4 pt-20 md:flex",
+        HIDE_WHILE_FLYING
+      )}
+    >
       <div className="flex flex-col items-center gap-3">
         {filtersOpen && (
           <div className="panel pointer-events-auto max-h-[50vh] w-[24rem] overflow-auto rounded-4xl p-4">
@@ -564,6 +665,7 @@ function DockChrome({
                 pickingPoint={pickingPoint}
                 onPickPoint={onPickPoint}
                 maxKm={maxKm}
+                places={places}
               />
             </div>
           </div>
@@ -615,7 +717,12 @@ function TopBar({
   accountMenu: ReactNode
 }) {
   return (
-    <header className="pointer-events-none absolute inset-x-4 top-4 z-20 grid grid-cols-2 items-center gap-x-3 gap-y-2 lg:grid-cols-[1fr_auto_1fr]">
+    <header
+      className={cn(
+        "pointer-events-none absolute inset-x-4 top-4 z-20 grid grid-cols-2 items-center gap-x-3 gap-y-2 lg:grid-cols-[1fr_auto_1fr]",
+        HIDE_WHILE_FLYING
+      )}
+    >
       <div className="pointer-events-auto flex items-center gap-2 justify-self-start">
         <Logo className="px-1" />
         <nav aria-label="Distribución">
@@ -654,6 +761,7 @@ function MobileChrome({
   pickingPoint,
   onPickPoint,
   maxKm,
+  places,
   mode,
   onMode,
   onSearch,
@@ -667,13 +775,19 @@ function MobileChrome({
   pickingPoint: boolean
   onPickPoint: () => void
   maxKm: number
+  places: VisitedZone[]
   mode: MapMode
   onMode: (mode: MapMode) => void
   onSearch: () => void
   accountMenu: ReactNode
 }) {
   return (
-    <div className="pointer-events-none absolute inset-0 z-10 flex flex-col justify-between p-3 md:hidden">
+    <div
+      className={cn(
+        "pointer-events-none absolute inset-0 z-10 flex flex-col justify-between p-3 md:hidden",
+        HIDE_WHILE_FLYING
+      )}
+    >
       <div className="flex items-start justify-between">
         <Logo className="pointer-events-auto h-12.5 px-1" />
         <div className="pointer-events-auto flex items-center gap-3">
@@ -721,6 +835,7 @@ function MobileChrome({
                   pickingPoint={pickingPoint}
                   onPickPoint={onPickPoint}
                   maxKm={maxKm}
+                  places={places}
                 />
               </div>
               <div className="mt-4">
@@ -735,19 +850,18 @@ function MobileChrome({
   )
 }
 
-/** Way into the poster editor. */
+/** Way into the poster editor: the app's main call to action. */
 function PosterLink({ className }: { className?: string }) {
   return (
     <Link
       to="/poster"
-      aria-label="Póster"
-      title="Crear póster"
       className={cn(
-        "panel inline-flex size-12.5 shrink-0 items-center justify-center rounded-4xl",
+        "inline-flex h-12.5 shrink-0 items-center justify-center gap-2 rounded-4xl bg-primary px-5 text-sm font-semibold whitespace-nowrap text-primary-foreground shadow-lg shadow-primary/25 transition-colors outline-none hover:bg-primary/90 focus-visible:ring-3 focus-visible:ring-ring/50 active:translate-y-px",
         className
       )}
     >
       <ImageIcon weight="fill" className="size-5" />
+      Crear póster
     </Link>
   )
 }
@@ -756,6 +870,7 @@ const MODES: SegmentedItem<MapMode>[] = [
   { value: "routes", label: "Rutas" },
   { value: "heatmap", label: "Calor" },
   { value: "playback", label: "Tiempo" },
+  { value: "relief", label: "3D", title: "Relieve en 3D" },
 ]
 
 function ModeToggle({

@@ -96,3 +96,11 @@ See https://react.dev/link/invalid-hook-call for tips about how to debug and fix
 [ 3774338ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=099b568b:15804
 [ 3801983ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=099b568b:15804
 [ 4113670ms] [LOG] [vite] server connection lost. Polling for restart... @ http://localhost:5173/@vite/client:1082
+[ 4196430ms] [ERROR] Failed to load resource: the server responded with a status of 504 (Outdated Optimize Dep) @ http://localhost:5173/node_modules/.vite/deps/@base-ui_react_drawer.js?v=f0919c6f:0
+[ 4196430ms] [ERROR] Failed to load resource: the server responded with a status of 504 (Outdated Optimize Dep) @ http://localhost:5173/node_modules/.vite/deps/@base-ui_react_scroll-area.js?v=41e86047:0
+[ 4196441ms] [ERROR] Failed to load resource: the server responded with a status of 504 (Outdated Optimize Dep) @ http://localhost:5173/node_modules/.vite/deps/@base-ui_react_avatar.js?v=97731de6:0
+[ 4196441ms] [ERROR] Failed to load resource: the server responded with a status of 504 (Outdated Optimize Dep) @ http://localhost:5173/node_modules/.vite/deps/@base-ui_react_menu.js?v=b3252010:0
+[ 4196444ms] [ERROR] Failed to load resource: the server responded with a status of 504 (Outdated Optimize Dep) @ http://localhost:5173/node_modules/.vite/deps/@base-ui_react_select.js?v=3a418f56:0
+[ 4196449ms] [ERROR] Failed to load resource: the server responded with a status of 504 (Outdated Optimize Dep) @ http://localhost:5173/node_modules/.vite/deps/@base-ui_react_slider.js?v=0ef85a9a:0
+[ 4196457ms] [ERROR] Failed to load resource: the server responded with a status of 504 (Outdated Optimize Dep) @ http://localhost:5173/node_modules/.vite/deps/cmdk.js?v=6666aa14:0
+[ 4196460ms] [ERROR] Failed to load resource: the server responded with a status of 504 (Outdated Optimize Dep) @ http://localhost:5173/node_modules/.vite/deps/@base-ui_react_dialog.js?v=b69240f5:0

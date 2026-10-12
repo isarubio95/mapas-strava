@@ -2,6 +2,7 @@ import type {
   ExpressionSpecification,
   FilterSpecification,
   LayerSpecification,
+  SourceSpecification,
   StyleSpecification,
 } from "maplibre-gl"
 
@@ -58,8 +59,68 @@ export function paletteForTheme(theme: Theme) {
   return theme === "dark" ? NIGHT : DAY
 }
 
+/** Colors of the 3D view: relief shading, extruded buildings and the sky. */
+export interface ReliefPalette {
+  shadow: string
+  highlight: string
+  accent: string
+  building: string
+  sky: string
+  horizon: string
+  fog: string
+}
+
+/** Night relief: moonlit ridges in teal, black valleys, a faint glow on the horizon. */
+export const NIGHT_RELIEF: ReliefPalette = {
+  shadow: "rgba(0, 5, 5, 0.82)",
+  highlight: "rgba(122, 196, 178, 0.28)",
+  accent: "rgba(0, 0, 0, 0.3)",
+  building: "#16302d",
+  sky: "#020707",
+  horizon: "#1d4a43",
+  fog: "#0b1716",
+}
+
+/** Day relief: warm umber shadows on cream, a pale sage sky and a sandy haze. */
+export const DAY_RELIEF: ReliefPalette = {
+  shadow: "rgba(92, 72, 38, 0.42)",
+  highlight: "rgba(255, 253, 244, 0.6)",
+  accent: "rgba(120, 98, 58, 0.16)",
+  building: "#e9dfca",
+  sky: "#bfd6d3",
+  horizon: "#f6f1e6",
+  fog: "#efe7d5",
+}
+
+export function reliefForTheme(theme: Theme) {
+  return theme === "dark" ? NIGHT_RELIEF : DAY_RELIEF
+}
+
+/** Height of the relief relative to the real one: enough for hills to read. */
+export const TERRAIN_EXAGGERATION = 1.5
+
 export const OPENFREEMAP_ATTRIBUTION =
   '<a href="https://openfreemap.org" target="_blank" rel="noreferrer">OpenFreeMap</a> <a href="https://www.openmaptiles.org/" target="_blank" rel="noreferrer">© OpenMapTiles</a> Datos de <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a>'
+
+const MAPTERHORN_ATTRIBUTION =
+  '<a href="https://mapterhorn.com/attribution" target="_blank" rel="noreferrer">© Mapterhorn</a>'
+
+/**
+ * Elevation tiles from Mapterhorn (Terrarium encoding). Zoom 12 covers the
+ * whole world; deeper zooms only exist in some countries.
+ */
+const elevation = (): SourceSpecification => ({
+  type: "raster-dem",
+  tiles: ["https://tiles.mapterhorn.com/{z}/{x}/{y}.webp"],
+  encoding: "terrarium",
+  tileSize: 512,
+  maxzoom: 12,
+  attribution: MAPTERHORN_ATTRIBUTION,
+})
+
+/** Terrain and hillshade read separate sources, as MapLibre recommends. */
+export const TERRAIN_SOURCE = "terrain"
+const SHADE_SOURCE = "terrain-shade"
 
 const SOURCE = "openmaptiles"
 
@@ -98,7 +159,12 @@ function road(
 export interface MapStyleOptions {
   labels?: boolean
   buildings?: boolean
+  /** Turns the map 3D: terrain, relief shading, extruded buildings and sky. */
+  relief?: ReliefPalette
 }
+
+/** Id of the layer the 3D routes go under, so buildings stand over them. */
+export const BUILDING_3D_LAYER_ID = "building-3d"
 
 /**
  * Builds the basemap style from a palette. Streets are fine lines with no
@@ -106,7 +172,7 @@ export interface MapStyleOptions {
  */
 export function createMapStyle(
   palette: MapPalette,
-  { labels = false, buildings = true }: MapStyleOptions = {}
+  { labels = false, buildings = true, relief }: MapStyleOptions = {}
 ): StyleSpecification {
   const layers: LayerSpecification[] = [
     {
@@ -129,6 +195,25 @@ export function createMapStyle(
       "source-layer": "park",
       paint: { "fill-color": palette.park, "fill-opacity": 0.85 },
     },
+  ]
+
+  if (relief) {
+    layers.push({
+      id: "hillshade",
+      type: "hillshade",
+      source: SHADE_SOURCE,
+      paint: {
+        // Igor's method keeps flat ground clear, so cities do not turn gray.
+        "hillshade-method": "igor",
+        "hillshade-exaggeration": 0.7,
+        "hillshade-shadow-color": relief.shadow,
+        "hillshade-highlight-color": relief.highlight,
+        "hillshade-accent-color": relief.accent,
+      },
+    })
+  }
+
+  layers.push(
     {
       id: "water",
       type: "fill",
@@ -151,10 +236,11 @@ export function createMapStyle(
           [18, 6],
         ]),
       },
-    },
-  ]
+    }
+  )
 
-  if (buildings) {
+  // In 3D the buildings rise instead, see below.
+  if (buildings && !relief) {
     layers.push({
       id: "building",
       type: "fill",
@@ -236,13 +322,55 @@ export function createMapStyle(
     }
   )
 
+  // After every flat layer, so the terrain drapes them in a single pass.
+  if (buildings && relief) {
+    const height: ExpressionSpecification = [
+      "coalesce",
+      ["get", "render_height"],
+      6,
+    ]
+    layers.push({
+      id: BUILDING_3D_LAYER_ID,
+      type: "fill-extrusion",
+      source: SOURCE,
+      "source-layer": "building",
+      minzoom: 14,
+      paint: {
+        "fill-extrusion-color": relief.building,
+        // Buildings rise out of the ground as the map zooms in.
+        "fill-extrusion-height": [
+          "interpolate",
+          ["linear"],
+          ["zoom"],
+          14,
+          0,
+          15.5,
+          height,
+        ],
+        "fill-extrusion-base": [
+          "interpolate",
+          ["linear"],
+          ["zoom"],
+          14,
+          0,
+          15.5,
+          ["coalesce", ["get", "render_min_height"], 0],
+        ],
+        "fill-extrusion-opacity": 0.92,
+        "fill-extrusion-vertical-gradient": true,
+      },
+    })
+  }
+
   if (labels) {
+    // Tilted, the far tiles would fill the horizon with tiny village names.
+    const places = relief ? ["city", "town"] : ["city", "town", "village"]
     layers.push({
       id: "place-label",
       type: "symbol",
       source: SOURCE,
       "source-layer": "place",
-      filter: ["match", ["get", "class"], ["city", "town", "village"], true, false],
+      filter: ["match", ["get", "class"], places, true, false],
       layout: {
         "text-field": ["coalesce", ["get", "name:es"], ["get", "name"]],
         "text-font": ["Noto Sans Regular"],
@@ -275,7 +403,7 @@ export function createMapStyle(
     })
   }
 
-  return {
+  const style: StyleSpecification = {
     version: 8,
     name: "trazo",
     glyphs: "https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf",
@@ -289,6 +417,27 @@ export function createMapStyle(
     transition: { duration: 450, delay: 0 },
     layers,
   }
+
+  if (relief) {
+    style.sources[TERRAIN_SOURCE] = elevation()
+    style.sources[SHADE_SOURCE] = elevation()
+    style.terrain = {
+      source: TERRAIN_SOURCE,
+      exaggeration: TERRAIN_EXAGGERATION,
+    }
+    style.sky = {
+      "sky-color": relief.sky,
+      "horizon-color": relief.horizon,
+      "fog-color": relief.fog,
+      // Fog starts halfway to the horizon and swallows the far ridges.
+      "fog-ground-blend": 0.45,
+      "horizon-fog-blend": 0.75,
+      "sky-horizon-blend": 0.6,
+      "atmosphere-blend": 0,
+    }
+  }
+
+  return style
 }
 
 /** Id of the first label layer, so routes can be drawn underneath it. */

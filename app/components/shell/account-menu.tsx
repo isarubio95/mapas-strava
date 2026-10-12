@@ -1,7 +1,11 @@
-import { GearIcon, ShieldCheckIcon, SignOutIcon } from "@phosphor-icons/react"
+import {
+  GearIcon,
+  ShieldCheckIcon,
+  SignOutIcon,
+  UserIcon,
+} from "@phosphor-icons/react"
 import { Link, useSubmit } from "react-router"
 
-import { Avatar, AvatarFallback } from "~/components/ui/avatar"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -19,14 +23,6 @@ export interface Account {
   email: string
 }
 
-function initials({ name, email }: Account) {
-  const words = (name ?? "").split(/\s+/).filter(Boolean)
-  const letters = words.length
-    ? words.slice(0, 2).map((word) => word[0])
-    : [email[0] ?? "?"]
-  return letters.join("").toUpperCase()
-}
-
 export function AccountMenu({
   account,
   className,
@@ -41,15 +37,11 @@ export function AccountMenu({
       <DropdownMenuTrigger
         aria-label="Tu cuenta"
         className={cn(
-          "panel pointer-events-auto size-12.5 rounded-full p-1 outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
+          "panel pointer-events-auto inline-flex size-12.5 items-center justify-center rounded-full text-muted-foreground transition-colors outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 aria-expanded:text-foreground",
           className
         )}
       >
-        <Avatar className="size-full">
-          <AvatarFallback className="bg-primary font-medium text-primary-foreground">
-            {initials(account)}
-          </AvatarFallback>
-        </Avatar>
+        <UserIcon weight="bold" className="size-5" />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" sideOffset={8} className="w-64">
         <DropdownMenuGroup>

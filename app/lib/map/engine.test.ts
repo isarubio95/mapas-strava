@@ -69,6 +69,27 @@ describe("RouteEngine", () => {
     ])
   })
 
+  it("counts where activities start apart from where they pass", () => {
+    const engine = new RouteEngine()
+    const { meta } = engine.load([
+      activity({
+        id: 1,
+        zones: ["region:ES-MD", "region:ES-CM"],
+        startZones: ["region:ES-MD"],
+      }),
+      activity({
+        id: 2,
+        zones: ["region:ES-MD"],
+        startZones: ["region:ES-MD"],
+      }),
+    ])
+    expect(meta.zones).toEqual([
+      { id: "region:ES-MD", count: 2 },
+      { id: "region:ES-CM", count: 1 },
+    ])
+    expect(meta.startZones).toEqual([{ id: "region:ES-MD", count: 2 }])
+  })
+
   it("opens on the home area, not on every trip", () => {
     const madrid = encodePolyline([-3.71, 40.41, -3.69, 40.43])
     const newYork = encodePolyline([-74.0, 40.71, -73.97, 40.78])
@@ -140,6 +161,38 @@ describe("RouteEngine", () => {
     const stamps = engine.timestamps(2)
     expect(stamps[0]).toBe(geometry.pathDay[0])
     expect(stamps[2]).toBeCloseTo(geometry.pathDay[0] + 2)
+  })
+
+  it("writes the filtered routes as GeoJSON lines for the 3D view", () => {
+    const engine = new RouteEngine()
+    engine.load(fixture)
+    const all = JSON.parse(engine.routesGeoJSON(EMPTY_FILTERS))
+    expect(all.type).toBe("FeatureCollection")
+    expect(all.features).toHaveLength(2)
+    expect(all.features[0]).toEqual({
+      type: "Feature",
+      properties: { a: 1, s: "Run" },
+      geometry: {
+        type: "LineString",
+        coordinates: [
+          [-3.75, 40.42],
+          [-3.72, 40.42],
+          [-3.66, 40.42],
+        ],
+      },
+    })
+
+    const rides = JSON.parse(
+      engine.routesGeoJSON({ ...EMPTY_FILTERS, sports: ["Ride"] })
+    )
+    expect(
+      rides.features.map((f: { properties: { a: number } }) => f.properties.a)
+    ).toEqual([2])
+    // Unlike the GPU mask, the dates apply here too.
+    const recent = JSON.parse(
+      engine.routesGeoJSON({ ...EMPTY_FILTERS, from: "2025-01-01" })
+    )
+    expect(recent.features).toHaveLength(1)
   })
 
   it("handles thousands of synthetic activities quickly", () => {

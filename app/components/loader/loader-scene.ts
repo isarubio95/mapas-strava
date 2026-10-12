@@ -2,6 +2,7 @@ import {
   AdditiveBlending,
   BufferAttribute,
   BufferGeometry,
+  DoubleSide,
   Group,
   Mesh,
   NormalBlending,
@@ -196,7 +197,10 @@ interface RibbonOptions {
 }
 
 /** Two vertices per point, offset along the miter so joints stay closed. */
-function ribbonGeometry(lines: Float32Array[], routes?: { times: Float32Array[]; colors: Vector3[] }) {
+function ribbonGeometry(
+  lines: Float32Array[],
+  routes?: { times: Float32Array[]; colors: Vector3[] }
+) {
   let vertexCount = 0
   let indexCount = 0
   for (const line of lines) {
@@ -263,7 +267,8 @@ function ribbonGeometry(lines: Float32Array[], routes?: { times: Float32Array[];
     }
     for (let p = 0; p < n - 1; p++) {
       const a = base + p * 2
-      index.set([a, a + 1, a + 2, a + 1, a + 3, a + 2], i)
+      // Counter-clockwise seen from above, the side the camera looks from.
+      index.set([a, a + 2, a + 1, a + 1, a + 2, a + 3], i)
       i += 6
     }
   })
@@ -285,7 +290,9 @@ function drawTimes(route: CityRoute) {
   for (let p = 0; p < out.length; p++) {
     out[p] =
       route.start +
-      (2 / Math.PI) * Math.asin(Math.min(1, route.distances[p] / total)) * route.duration
+      (2 / Math.PI) *
+        Math.asin(Math.min(1, route.distances[p] / total)) *
+        route.duration
   }
   return out
 }
@@ -318,9 +325,16 @@ const MAX_HEADS = 96
  */
 export function createLoaderScene(
   canvas: HTMLCanvasElement,
-  { theme: initialTheme, reducedMotion: initialReduced }: { theme: Theme; reducedMotion: boolean }
+  {
+    theme: initialTheme,
+    reducedMotion: initialReduced,
+  }: { theme: Theme; reducedMotion: boolean }
 ): LoaderScene {
-  const renderer = new WebGLRenderer({ canvas, antialias: true, powerPreference: "high-performance" })
+  const renderer = new WebGLRenderer({
+    canvas,
+    antialias: true,
+    powerPreference: "high-performance",
+  })
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
 
   const city: City = generateCity()
@@ -344,14 +358,22 @@ export function createLoaderScene(
   let theme = initialTheme
   let reduced = initialReduced
   let content: Group | null = null
-  let heads: { geometry: BufferGeometry; position: Float32Array; color: Float32Array; alpha: Float32Array } | null =
-    null
+  let heads: {
+    geometry: BufferGeometry
+    position: Float32Array
+    color: Float32Array
+    alpha: Float32Array
+  } | null = null
   let routeColors: Vector3[] = []
 
   const materials: ShaderMaterial[] = []
   const geometries: BufferGeometry[] = []
 
-  const ribbon = (geometry: BufferGeometry, options: RibbonOptions, order: number) => {
+  const ribbon = (
+    geometry: BufferGeometry,
+    options: RibbonOptions,
+    order: number
+  ) => {
     const material = new ShaderMaterial({
       vertexShader: RIBBON_VERTEX,
       fragmentShader: RIBBON_FRAGMENT,
@@ -373,6 +395,8 @@ export function createLoaderScene(
       depthTest: false,
       depthWrite: false,
       blending: options.blending ?? NormalBlending,
+      // Tight U-turns fold the ribbon over itself.
+      side: DoubleSide,
     })
     materials.push(material)
     const mesh = new Mesh(geometry, material)
@@ -417,21 +441,64 @@ export function createLoaderScene(
     const river = ribbonGeometry([city.river])
     geometries.push(river)
     group.add(
-      ribbon(river, { color: palette.water, width: city.riverWidth, minPx: 0, maxPx: 1e4, opacity: 1 }, 1)
+      ribbon(
+        river,
+        {
+          color: palette.water,
+          width: city.riverWidth,
+          minPx: 0,
+          maxPx: 1e4,
+          opacity: 1,
+        },
+        1
+      )
     )
 
-    const streetsOf = (kind: string) => city.streets.filter((street) => street.kind === kind).map((s) => s.points)
+    const streetsOf = (kind: string) =>
+      city.streets.filter((street) => street.kind === kind).map((s) => s.points)
     const minor = ribbonGeometry(streetsOf("minor"))
     const path = ribbonGeometry(streetsOf("path"))
     const major = ribbonGeometry(streetsOf("major"))
     geometries.push(minor, path, major)
     group.add(
-      ribbon(path, { color: palette.path, width: 0.18, minPx: 0.6, maxPx: 1.6, opacity: 1 }, 2),
-      ribbon(minor, { color: palette.roadMinor, width: 0.26, minPx: 0.8, maxPx: 2.4, opacity: 1 }, 3),
-      ribbon(major, { color: palette.roadMajor, width: 0.5, minPx: 1.2, maxPx: 4.2, opacity: 1 }, 4)
+      ribbon(
+        path,
+        {
+          color: palette.path,
+          width: 0.18,
+          minPx: 0.6,
+          maxPx: 1.6,
+          opacity: 1,
+        },
+        2
+      ),
+      ribbon(
+        minor,
+        {
+          color: palette.roadMinor,
+          width: 0.26,
+          minPx: 0.8,
+          maxPx: 2.4,
+          opacity: 1,
+        },
+        3
+      ),
+      ribbon(
+        major,
+        {
+          color: palette.roadMajor,
+          width: 0.5,
+          minPx: 1.2,
+          maxPx: 4.2,
+          opacity: 1,
+        },
+        4
+      )
     )
 
-    routeColors = city.routes.map((route) => rgb(sportColor(route.sport, theme)))
+    routeColors = city.routes.map((route) =>
+      rgb(sportColor(route.sport, theme))
+    )
     const routes = ribbonGeometry(
       city.routes.map((route) => route.points),
       { times, colors: routeColors }
@@ -443,15 +510,42 @@ export function createLoaderScene(
       group.add(
         ribbon(
           routes,
-          { route: true, width: 1.3, minPx: 3, maxPx: 9, opacity: 0.16, soft: 1, blending: AdditiveBlending },
+          {
+            route: true,
+            width: 1.3,
+            minPx: 3,
+            maxPx: 9,
+            opacity: 0.16,
+            soft: 1,
+            blending: AdditiveBlending,
+          },
           5
         ),
-        ribbon(routes, { route: true, width: 0.28, minPx: 0.9, maxPx: 2.4, opacity: 0.85 }, 6)
+        ribbon(
+          routes,
+          { route: true, width: 0.28, minPx: 0.9, maxPx: 2.4, opacity: 0.85 },
+          6
+        )
       )
     } else {
       group.add(
-        ribbon(routes, { route: true, color: PAPER, width: 0.62, minPx: 2.8, maxPx: 5.6, opacity: 0.85 }, 5),
-        ribbon(routes, { route: true, width: 0.3, minPx: 1.3, maxPx: 2.6, opacity: 0.92 }, 6)
+        ribbon(
+          routes,
+          {
+            route: true,
+            color: PAPER,
+            width: 0.62,
+            minPx: 2.8,
+            maxPx: 5.6,
+            opacity: 0.85,
+          },
+          5
+        ),
+        ribbon(
+          routes,
+          { route: true, width: 0.3, minPx: 1.3, maxPx: 2.6, opacity: 0.92 },
+          6
+        )
       )
     }
 
@@ -483,7 +577,12 @@ export function createLoaderScene(
     headPoints.renderOrder = 7
     headPoints.frustumCulled = false
     group.add(headPoints)
-    heads = { geometry: headGeometry, position: headPosition, color: headColor, alpha: headAlpha }
+    heads = {
+      geometry: headGeometry,
+      position: headPosition,
+      color: headColor,
+      alpha: headAlpha,
+    }
 
     content = group
     pivot.add(group)
@@ -527,7 +626,9 @@ export function createLoaderScene(
         const age = time - route.start
         const end = route.duration
         // Fade in as the route starts, and out a moment after it arrives.
-        const alpha = Math.min(1, age / 0.15) * (1 - Math.min(1, Math.max(0, (age - end) / 0.6)))
+        const alpha =
+          Math.min(1, age / 0.15) *
+          (1 - Math.min(1, Math.max(0, (age - end) / 0.6)))
         if (alpha <= 0) continue
         headAt(route, time, tip)
         heads.position.set([tip.x, tip.y, 0], count * 3)
@@ -548,13 +649,17 @@ export function createLoaderScene(
     // Narrow screens see less of the city, so the camera backs off further.
     const aspect = width && height ? width / height : 1.6
     const fit = Math.max(1, 1.45 / aspect) ** 0.75
-    const distance = lerp(30, 112, u) * fit
+    const distance = lerp(40, 112, u) * fit
     const tilt = lerp(0.98, 0.7, u)
     const targetX = lerp(city.home[0], 0, u)
     const targetY = lerp(city.home[1], -6, u)
     const spin = reduced ? -0.18 : -0.42 + time * 0.016
 
-    camera.position.set(0, -distance * Math.sin(tilt), distance * Math.cos(tilt))
+    camera.position.set(
+      0,
+      -distance * Math.sin(tilt),
+      distance * Math.cos(tilt)
+    )
     camera.lookAt(0, 0, 0)
     pivot.rotation.z = spin
     content?.position.set(-targetX, -targetY, 0)

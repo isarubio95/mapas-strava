@@ -24,9 +24,10 @@ describe("generateCity", () => {
     const starts = city.routes.map((route) => route.start)
     expect(starts).toEqual([...starts].sort((a, b) => a - b))
     expect(starts[0]).toBeLessThan(0.5)
-    const early = starts.filter((start) => start < 5).length
-    const later = starts.filter((start) => start >= 20 && start < 25).length
-    expect(later).toBeGreaterThan(early)
+    const gap = (from: number, to: number) =>
+      (starts[to] - starts[from]) / (to - from)
+    const n = starts.length
+    expect(gap(n - 20, n - 1)).toBeLessThan(gap(0, 19))
   })
 
   it("keeps every route on the map with sane distances", () => {
@@ -40,9 +41,30 @@ describe("generateCity", () => {
         expect(Math.abs(route.points[i + 1])).toBeLessThan(ey + 8)
       }
       for (let i = 1; i < route.distances.length; i++) {
-        expect(route.distances[i]).toBeGreaterThanOrEqual(route.distances[i - 1])
+        expect(route.distances[i]).toBeGreaterThanOrEqual(
+          route.distances[i - 1]
+        )
       }
     }
+  })
+
+  it("sends routes across the river", () => {
+    const riverYAt = (x: number) => {
+      let best = 0
+      for (let i = 2; i < city.river.length; i += 2) {
+        if (Math.abs(city.river[i] - x) < Math.abs(city.river[best] - x))
+          best = i
+      }
+      return city.river[best + 1]
+    }
+    const crossing = city.routes.filter((route) => {
+      const sides = new Set<boolean>()
+      for (let i = 0; i < route.points.length; i += 2) {
+        sides.add(route.points[i + 1] > riverYAt(route.points[i]))
+      }
+      return sides.size === 2
+    })
+    expect(crossing.length / city.routes.length).toBeGreaterThan(0.15)
   })
 
   it("starts most routes from home", () => {

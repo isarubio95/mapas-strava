@@ -14,20 +14,32 @@ import {
 } from "~/components/ui/select"
 import { Slider } from "~/components/ui/slider"
 import { EMPTY_FILTERS, NEAR_RADII, type Filters } from "~/lib/filters"
-import type { Zone } from "~/lib/activities"
+import type { VisitedZone } from "~/lib/activities"
 
 const YEARS = ["2026", "2025", "2024", "2023"] as const
 
-const PLACES = [
-  { id: "city:28079", name: "Madrid" },
-  { id: "city:08019", name: "Barcelona" },
-  { id: "city:46250", name: "València" },
-  { id: "city:41091", name: "Sevilla" },
-  { id: "city:48020", name: "Bilbao" },
-  { id: "country:ES", name: "España" },
-  { id: "country:PT", name: "Portugal" },
-  { id: "country:FR", name: "Francia" },
-] as const
+const PLACE_GROUPS: {
+  key: string
+  label: string
+  match: (place: VisitedZone) => boolean
+}[] = [
+  { key: "city", label: "Ciudades", match: (place) => place.level === "city" },
+  {
+    key: "region-es",
+    label: "Comunidades autónomas",
+    match: (place) => place.level === "region" && place.parent === "country:ES",
+  },
+  {
+    key: "region",
+    label: "Otras regiones",
+    match: (place) => place.level === "region" && place.parent !== "country:ES",
+  },
+  {
+    key: "country",
+    label: "Países",
+    match: (place) => place.level === "country",
+  },
+]
 
 export function FiltersForm({
   filters,
@@ -35,15 +47,21 @@ export function FiltersForm({
   pickingPoint,
   onPickPoint,
   maxKm,
+  places,
 }: {
   filters: Filters
   onChange: (filters: Filters) => void
   pickingPoint: boolean
   onPickPoint: () => void
   maxKm: number
-  zones?: Zone[]
+  /** Only the places the user has activities in, most visited first. */
+  places: VisitedZone[]
 }) {
   const distance = [filters.minKm ?? 0, filters.maxKm ?? maxKm]
+  const placeLabels = Object.fromEntries([
+    ["all", "Cualquier lugar"],
+    ...places.map((place) => [place.id, place.name]),
+  ])
 
   return (
     <div className="flex flex-col gap-5">
@@ -61,7 +79,11 @@ export function FiltersForm({
               key={year}
               pressed={filters.from === `${year}-01-01`}
               onClick={() =>
-                onChange({ ...filters, from: `${year}-01-01`, to: `${year}-12-31` })
+                onChange({
+                  ...filters,
+                  from: `${year}-01-01`,
+                  to: `${year}-12-31`,
+                })
               }
             >
               {year}
@@ -73,27 +95,43 @@ export function FiltersForm({
       <Field>
         <FieldLabel>Lugar</FieldLabel>
         <Select
+          items={placeLabels}
           value={filters.zone ?? "all"}
-          onValueChange={(value) =>
+          onValueChange={(value) => {
+            const zone = !value || value === "all" ? null : String(value)
+            // Regions are listed by the routes that start there.
+            const isRegion = places.some(
+              (place) => place.id === zone && place.level === "region"
+            )
             onChange({
               ...filters,
-              zone: !value || value === "all" ? null : String(value),
+              zone,
+              zoneMode: isRegion ? "starts" : filters.zoneMode,
             })
-          }
+          }}
         >
           <SelectTrigger className="w-full bg-background/60" size="sm">
             <SelectValue placeholder="Cualquier lugar" />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Cualquier lugar</SelectItem>
-            <SelectGroup>
-              <SelectLabel>Sitios frecuentes</SelectLabel>
-              {PLACES.map((place) => (
-                <SelectItem key={place.id} value={place.id}>
-                  {place.name}
-                </SelectItem>
-              ))}
-            </SelectGroup>
+            {PLACE_GROUPS.map(({ key, label, match }) => {
+              const group = places.filter(match)
+              if (group.length === 0) return null
+              return (
+                <SelectGroup key={key}>
+                  <SelectLabel>{label}</SelectLabel>
+                  {group.map((place) => (
+                    <SelectItem key={place.id} value={place.id}>
+                      <span className="flex-1">{place.name}</span>
+                      <span className="text-xs text-muted-foreground tabular-nums">
+                        {place.count}
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              )
+            })}
           </SelectContent>
         </Select>
         {filters.zone && (
@@ -117,7 +155,7 @@ export function FiltersForm({
       <Field>
         <div className="flex items-baseline justify-between gap-2">
           <FieldLabel>Distancia</FieldLabel>
-          <span className="text-xs tabular-nums text-muted-foreground">
+          <span className="text-xs text-muted-foreground tabular-nums">
             {distance[0]}–{distance[1]} km
           </span>
         </div>
