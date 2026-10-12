@@ -34,3 +34,8 @@
     at workLoopSync (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=2d8fec12:9044:37)
     at renderRootSync (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=2d8fec12:9028:6)
     at performWorkOnRoot (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=2d8fec12:8715:27) @ http://localhost:5173/node_modules/.vite/deps/development-D7FwSc4C.js?v=2d8fec12:5398
+[ 4205906ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://localhost:5173/prototipos:0
+[ 4206087ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://localhost:5173/favicon.ico:0
+[ 4206235ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://localhost:5173/prototipos:0
+[ 4206245ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://localhost:5173/favicon.ico:0
+[ 4217228ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=2d8fec12:15804

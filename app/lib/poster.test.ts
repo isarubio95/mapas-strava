@@ -5,12 +5,16 @@ import type { RouteGeometry } from "~/lib/map/engine"
 import {
   exportSize,
   focusedPlace,
+  formatBBox,
   formatCoordinates,
+  localFrame,
   MAX_EXPORT_SIDE,
+  parseBBox,
   POSTER_FORMATS,
   POSTER_WIDTH,
   posterRoutes,
   posterSize,
+  routesBounds,
   routesFrame,
   type PlaceLabel,
   type PosterRoutes,
@@ -136,6 +140,69 @@ describe("routesFrame", () => {
 
   it("falls back to the home area without routes", () => {
     expect(routesFrame(lines(), [1, 2, 3, 4])).toEqual([1, 2, 3, 4])
+  })
+})
+
+describe("routesBounds", () => {
+  it("keeps every point, ends included", () => {
+    expect(
+      routesBounds(
+        lines([
+          [1, 2],
+          [3, 1],
+          [2, 4],
+        ])
+      )
+    ).toEqual([1, 1, 3, 4])
+  })
+})
+
+describe("localFrame", () => {
+  // Two towns about 900 km apart: one near the view, one far from it.
+  const rome = Array.from({ length: 100 }, (_, index): [number, number] => [
+    12.45 + index / 1000,
+    41.85 + index / 1000,
+  ])
+  const madrid = Array.from({ length: 300 }, (_, index): [number, number] => [
+    -3.75 + index / 3000,
+    40.4 + index / 3000,
+  ])
+  const routes = lines(rome, madrid)
+
+  it("frames the routes around the view, not all of them", () => {
+    const frame = localFrame(routes, [12.4, 41.8, 12.6, 42])!
+    expect(frame[0]).toBeGreaterThan(12)
+    expect(frame[2]).toBeLessThan(13)
+  })
+
+  it("looks a town across even when zoomed into a street", () => {
+    const frame = localFrame(routes, [12.5, 41.9, 12.501, 41.901])!
+    expect(frame[2] - frame[0]).toBeGreaterThan(0.05)
+  })
+
+  it("goes to the nearest routes when none pass through the view", () => {
+    const frame = localFrame(routes, [9, 45, 9.2, 45.2])!
+    expect(frame[0]).toBeGreaterThan(12)
+    expect(frame[3]).toBeLessThan(42)
+  })
+
+  it("has nothing to frame without routes", () => {
+    expect(localFrame(lines(), [0, 0, 1, 1])).toBeNull()
+  })
+})
+
+describe("parseBBox", () => {
+  it("reads back what formatBBox writes", () => {
+    expect(parseBBox(formatBBox([12.4, 41.8, 12.6, 42]))).toEqual([
+      12.4, 41.8, 12.6, 42,
+    ])
+  })
+
+  it("rejects broken or empty boxes", () => {
+    expect(parseBBox(null)).toBeNull()
+    expect(parseBBox("1,2,3")).toBeNull()
+    expect(parseBBox("1,2,x,4")).toBeNull()
+    expect(parseBBox("3,2,1,4")).toBeNull()
   })
 })
 

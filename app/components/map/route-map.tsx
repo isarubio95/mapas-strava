@@ -125,7 +125,9 @@ const selectionDrawn = (at: number, animate: boolean) =>
   animate ? easeOutCubic((clock() - at) / SELECTION_DRAW_3D) : 1
 
 /** Bounds of interleaved [lng, lat] coordinates. */
-function coordsBounds(coords: Float64Array): [[number, number], [number, number]] {
+function coordsBounds(
+  coords: Float64Array
+): [[number, number], [number, number]] {
   let minX = Infinity
   let minY = Infinity
   let maxX = -Infinity

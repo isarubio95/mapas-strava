@@ -37,11 +37,19 @@ export function AccountMenu({
       <DropdownMenuTrigger
         aria-label="Tu cuenta"
         className={cn(
-          "panel pointer-events-auto inline-flex size-12.5 items-center justify-center rounded-full text-muted-foreground transition-colors outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 aria-expanded:text-foreground",
+          "group/account panel pointer-events-auto inline-flex size-12.5 items-center justify-center rounded-full text-muted-foreground transition-colors outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 aria-expanded:text-foreground",
           className
         )}
       >
-        <UserIcon weight="bold" className="size-5" />
+        <span className="relative size-5">
+          <UserIcon weight="bold" className="absolute inset-0 size-5" />
+          {/* Filled twin revealed from the centre outwards while the menu is open. */}
+          <UserIcon
+            weight="fill"
+            aria-hidden
+            className="absolute inset-0 size-5 [clip-path:circle(0%_at_50%_50%)] transition-[clip-path] duration-300 ease-(--ease-out-expo) group-aria-expanded/account:[clip-path:circle(75%_at_50%_50%)] group-aria-expanded/account:duration-500 motion-reduce:transition-none"
+          />
+        </span>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" sideOffset={8} className="w-64">
         <DropdownMenuGroup>

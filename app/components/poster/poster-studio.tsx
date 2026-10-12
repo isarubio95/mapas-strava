@@ -1,11 +1,12 @@
 import {
+  ArrowCounterClockwiseIcon,
   ArrowLeftIcon,
   CrosshairSimpleIcon,
   DownloadSimpleIcon,
   FilePdfIcon,
 } from "@phosphor-icons/react"
 import { jsPDF } from "jspdf"
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useId, useMemo, useRef, useState } from "react"
 import { Link } from "react-router"
 import { toast } from "sonner"
 
@@ -19,8 +20,11 @@ import type { Activity } from "~/lib/activities"
 import { dayNumber, type Filters } from "~/lib/filters"
 import type { BBox } from "~/lib/geo"
 import {
+  adjustPalette,
   createPosterStyle,
   isDarkPalette,
+  POSTER_MAP_DEFAULTS,
+  POSTER_ROUTE_DEFAULTS,
   POSTER_THEMES,
   textForLand,
   type PosterPalette,
@@ -57,20 +61,20 @@ const STAGE_PADDING = 32
 const CUSTOM_COLORS = [
   { key: "land", label: "Fondo" },
   { key: "water", label: "Agua" },
+  { key: "park", label: "Parques" },
   { key: "roads", label: "Calles" },
+  { key: "highway", label: "Autovías" },
   { key: "route", label: "Rutas" },
-] as const
+  { key: "text", label: "Texto" },
+] as const satisfies readonly { key: keyof PosterPalette; label: string }[]
 
-type CustomColors = Record<(typeof CUSTOM_COLORS)[number]["key"], string>
+const percent = (value: number) =>
+  value.toLocaleString("es-ES", { style: "percent" })
+const signedPercent = (value: number) =>
+  value.toLocaleString("es-ES", { style: "percent", signDisplay: "exceptZero" })
 
-function customPalette(colors: CustomColors): PosterPalette {
-  return {
-    ...colors,
-    park: colors.land,
-    highway: colors.roads,
-    text: textForLand(colors.land),
-  }
-}
+const sameValues = <T extends object>(a: T, b: T) =>
+  (Object.keys(a) as (keyof T)[]).every((key) => a[key] === b[key])
 
 /** Region and country that contain a point, when the catalog has them. */
 async function zonesAt({ lng, lat }: { lng: number; lat: number }) {
@@ -168,14 +172,11 @@ export function PosterStudio({
   const [formatId, setFormatId] = useState<FormatId>("a4")
   const [themeId, setThemeId] = useState<PosterThemeId>("ambar")
   const [custom, setCustom] = useState(false)
-  const [colors, setColors] = useState<CustomColors>({
-    land: "#0b0704",
-    water: "#030201",
-    roads: "#c4652a",
-    route: "#fff1d6",
-  })
+  // The own palette starts from the theme on show the first time it opens.
+  const [colors, setColors] = useState<PosterPalette | null>(null)
   const [bySport, setBySport] = useState(false)
-  const [weight, setWeight] = useState(1)
+  const [routeLook, setRouteLook] = useState(POSTER_ROUTE_DEFAULTS)
+  const [mapLook, setMapLook] = useState(POSTER_MAP_DEFAULTS)
   // The title names what the map frames until the user writes their own.
   const [placeName, setPlaceName] = useState("")
   const [customTitle, setCustomTitle] = useState<string | null>(null)
@@ -197,24 +198,23 @@ export function PosterStudio({
   const { width, height } = posterSize(format)
   const output = exportSize(format)
 
+  const themePalette: PosterPalette =
+    POSTER_THEMES.find((item) => item.id === themeId)?.palette ??
+    POSTER_THEMES[0].palette
+  const ownPalette = colors ?? themePalette
   const palette = useMemo(
-    () =>
-      custom
-        ? customPalette(colors)
-        : (POSTER_THEMES.find((item) => item.id === themeId)?.palette ??
-          POSTER_THEMES[0].palette),
-    [custom, colors, themeId]
+    () => adjustPalette(custom ? ownPalette : themePalette, mapLook),
+    [custom, ownPalette, themePalette, mapLook]
   )
   const dark = isDarkPalette(palette)
 
-  const mapStyle = useMemo(
-    () =>
-      createPosterStyle(palette, {
-        color: bySport ? null : palette.route,
-        weight,
-      }),
-    [palette, bySport, weight]
-  )
+  function setColor(key: keyof PosterPalette, value: string) {
+    const next = { ...ownPalette, [key]: value }
+    // Keeps the title readable when the ground goes from dark to light.
+    if (key === "land" && isDarkPalette(next) !== isDarkPalette(ownPalette))
+      next.text = textForLand(value)
+    setColors(next)
+  }
 
   const dayRange = useMemo((): [number, number] => {
     const from = filters.from ? dayNumber(filters.from) : (meta?.firstDay ?? 0)
@@ -252,6 +252,25 @@ export function PosterStudio({
     })
   }, [geometry, query, dayRange, routeIndex, activities, sportColors, dark])
 
+  // With a single sport there is nothing to tell apart by color.
+  const multiSport = useMemo(
+    () =>
+      new Set(routes?.features.map((feature) => feature.properties.color))
+        .size > 1,
+    [routes]
+  )
+  const colorBySport = bySport && multiSport
+
+  const mapStyle = useMemo(
+    () =>
+      createPosterStyle(
+        palette,
+        { ...routeLook, color: colorBySport ? null : palette.route },
+        mapLook.streets
+      ),
+    [palette, colorBySport, routeLook, mapLook.streets]
+  )
+
   /** The route whole, else the view the map had, else where the routes are dense. */
   const initialFrame = useMemo(() => {
     if (!routes) return null
@@ -263,7 +282,7 @@ export function PosterStudio({
   }, [routes, route, view, geometry])
 
   /** Back to the route, or to the routes of the place the poster shows. */
-  function center() {
+  function recenter() {
     if (!routes) return
     const frame = route
       ? routesBounds(routes)
@@ -451,9 +470,12 @@ export function PosterStudio({
             ))}
             <ThemeSwatch
               label="Propio"
-              palette={customPalette(colors)}
+              palette={ownPalette}
               selected={custom}
-              onClick={() => setCustom(true)}
+              onClick={() => {
+                setColors(ownPalette)
+                setCustom(true)
+              }}
             />
           </div>
           {custom && (
@@ -465,13 +487,8 @@ export function PosterStudio({
                 >
                   <input
                     type="color"
-                    value={colors[key]}
-                    onChange={(event) =>
-                      setColors((current) => ({
-                        ...current,
-                        [key]: event.target.value,
-                      }))
-                    }
+                    value={ownPalette[key]}
+                    onChange={(event) => setColor(key, event.target.value)}
                     className="size-6 cursor-pointer rounded-md border-0 bg-transparent p-0"
                   />
                   {label}
@@ -481,40 +498,99 @@ export function PosterStudio({
           )}
         </Section>
 
-        <Section title="Rutas">
-          <label className="flex items-center justify-between gap-3 text-sm">
-            Un color por deporte
-            <Switch checked={bySport} onCheckedChange={setBySport} />
-          </label>
-          <div className="flex flex-col gap-2.5 text-sm">
-            <div className="flex items-center justify-between">
-              <span id="poster-weight">Grosor</span>
-              <span className="text-muted-foreground tabular-nums">
-                {weight.toLocaleString("es-ES", { maximumFractionDigits: 1 })}×
-              </span>
-            </div>
-            <Slider
-              aria-labelledby="poster-weight"
-              min={0.5}
-              max={2.5}
+        <Section
+          title="Rutas"
+          onReset={
+            sameValues(routeLook, POSTER_ROUTE_DEFAULTS)
+              ? undefined
+              : () => setRouteLook(POSTER_ROUTE_DEFAULTS)
+          }
+        >
+          {multiSport && (
+            <label className="flex items-center justify-between gap-3 text-sm">
+              Un color por deporte
+              <Switch checked={bySport} onCheckedChange={setBySport} />
+            </label>
+          )}
+          <SliderField
+            label="Grosor"
+            min={0.4}
+            max={3}
+            step={0.1}
+            value={routeLook.weight}
+            format={(value) =>
+              `${value.toLocaleString("es-ES", { maximumFractionDigits: 1 })}×`
+            }
+            onChange={(weight) => setRouteLook({ ...routeLook, weight })}
+          />
+          <SliderField
+            label="Opacidad"
+            min={0.2}
+            max={1}
+            step={0.05}
+            value={routeLook.opacity}
+            format={percent}
+            onChange={(opacity) => setRouteLook({ ...routeLook, opacity })}
+          />
+          {dark && (
+            <SliderField
+              label="Resplandor"
+              min={0}
+              max={2}
               step={0.1}
-              value={[weight]}
-              onValueChange={(value) =>
-                setWeight(Array.isArray(value) ? value[0] : value)
-              }
+              value={routeLook.glow}
+              format={percent}
+              onChange={(glow) => setRouteLook({ ...routeLook, glow })}
             />
-          </div>
+          )}
           <Button
             type="button"
             variant="outline"
             size="sm"
             className="self-start"
             disabled={!routeCount}
-            onClick={center}
+            onClick={recenter}
           >
             <CrosshairSimpleIcon data-icon="inline-start" />
             {route ? "Centrar la ruta" : "Centrar"}
           </Button>
+        </Section>
+
+        <Section
+          title="Mapa"
+          onReset={
+            sameValues(mapLook, POSTER_MAP_DEFAULTS)
+              ? undefined
+              : () => setMapLook(POSTER_MAP_DEFAULTS)
+          }
+        >
+          <SliderField
+            label="Calles"
+            min={0.1}
+            max={1}
+            step={0.05}
+            value={mapLook.streets}
+            format={percent}
+            onChange={(streets) => setMapLook({ ...mapLook, streets })}
+          />
+          <SliderField
+            label="Brillo"
+            min={-0.4}
+            max={0.4}
+            step={0.05}
+            value={mapLook.brightness}
+            format={signedPercent}
+            onChange={(brightness) => setMapLook({ ...mapLook, brightness })}
+          />
+          <SliderField
+            label="Saturación"
+            min={0}
+            max={2}
+            step={0.05}
+            value={mapLook.saturation}
+            format={percent}
+            onChange={(saturation) => setMapLook({ ...mapLook, saturation })}
+          />
         </Section>
 
         <Section title="Texto">
@@ -638,11 +714,19 @@ function PosterSkeleton({ width, hidden }: { width: number; hidden: boolean }) {
     >
       <div
         className="absolute left-1/2 -translate-x-1/2 rounded-full bg-foreground/10"
-        style={{ bottom: width * 0.217, width: width * 0.6, height: width * 0.05 }}
+        style={{
+          bottom: width * 0.217,
+          width: width * 0.6,
+          height: width * 0.05,
+        }}
       />
       <div
         className="absolute left-1/2 -translate-x-1/2 rounded-full bg-foreground/10"
-        style={{ bottom: width * 0.146, width: width * 0.3, height: width * 0.02 }}
+        style={{
+          bottom: width * 0.146,
+          width: width * 0.3,
+          height: width * 0.02,
+        }}
       />
     </div>
   )
@@ -650,18 +734,73 @@ function PosterSkeleton({ width, hidden }: { width: number; hidden: boolean }) {
 
 function Section({
   title,
+  onReset,
   children,
 }: {
   title: string
+  /** Shows a reset button in the header while the section has changes. */
+  onReset?: () => void
   children: React.ReactNode
 }) {
   return (
     <section className="flex flex-col gap-3">
-      <h2 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-        {title}
-      </h2>
+      <div className="flex min-h-6 items-center justify-between gap-2">
+        <h2 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+          {title}
+        </h2>
+        {onReset && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="xs"
+            className="-mr-2.5 text-muted-foreground"
+            onClick={onReset}
+          >
+            <ArrowCounterClockwiseIcon data-icon="inline-start" />
+            Restablecer
+          </Button>
+        )}
+      </div>
       {children}
     </section>
+  )
+}
+
+function SliderField({
+  label,
+  value,
+  min,
+  max,
+  step,
+  format,
+  onChange,
+}: {
+  label: string
+  value: number
+  min: number
+  max: number
+  step: number
+  format: (value: number) => string
+  onChange: (value: number) => void
+}) {
+  const id = useId()
+  return (
+    <div className="flex flex-col gap-2.5 text-sm">
+      <div className="flex items-center justify-between">
+        <span id={id}>{label}</span>
+        <span className="text-muted-foreground tabular-nums">
+          {format(value)}
+        </span>
+      </div>
+      <Slider
+        aria-labelledby={id}
+        min={min}
+        max={max}
+        step={step}
+        value={[value]}
+        onValueChange={(next) => onChange(Array.isArray(next) ? next[0] : next)}
+      />
+    </div>
   )
 }
 

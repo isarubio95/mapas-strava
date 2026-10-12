@@ -123,7 +123,12 @@ function trimmedBox(
   lats.sort((a, b) => a - b)
   const at = (values: number[], share: number) =>
     values[Math.round(share * (values.length - 1))]
-  return [at(lngs, trim), at(lats, trim), at(lngs, 1 - trim), at(lats, 1 - trim)]
+  return [
+    at(lngs, trim),
+    at(lats, trim),
+    at(lngs, 1 - trim),
+    at(lats, 1 - trim),
+  ]
 }
 
 /**
@@ -155,12 +160,20 @@ export function localFrame(routes: PosterRoutes, view: BBox) {
   let lng = (view[0] + view[2]) / 2
   let lat = (view[1] + view[3]) / 2
   const cos = Math.cos((lat * Math.PI) / 180)
-  const halfLat = Math.max((view[3] - view[1]) / 2, LOCAL_RADIUS_KM / KM_PER_DEGREE)
+  const halfLat = Math.max(
+    (view[3] - view[1]) / 2,
+    LOCAL_RADIUS_KM / KM_PER_DEGREE
+  )
   const halfLng = Math.max(
     (view[2] - view[0]) / 2,
     LOCAL_RADIUS_KM / (KM_PER_DEGREE * cos)
   )
-  const area = (): BBox => [lng - halfLng, lat - halfLat, lng + halfLng, lat + halfLat]
+  const area = (): BBox => [
+    lng - halfLng,
+    lat - halfLat,
+    lng + halfLng,
+    lat + halfLat,
+  ]
   if (!points.some((point) => inBox(point, area()))) {
     let best = Infinity
     for (const [x, y] of points) {

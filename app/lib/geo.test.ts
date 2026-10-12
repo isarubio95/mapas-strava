@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import { circleBBox, distanceToPolyline, haversine } from "./geo"
+import { circleBBox, distanceToPolyline, haversine, viewBounds } from "./geo"
 
 describe("geo", () => {
   it("measures Madrid to Barcelona at about 505 km", () => {
@@ -32,5 +32,24 @@ describe("geo", () => {
     expect(haversine(-3.7, 40.4, -3.7, minY)).toBeCloseTo(1000, -1)
     expect(minX).toBeLessThan(-3.7)
     expect(maxY).toBeGreaterThan(40.4)
+  })
+})
+
+describe("viewBounds", () => {
+  it("covers the whole world at zoom 0 with a 512 px square", () => {
+    const [west, south, east, north] = viewBounds(0, 0, 0, 512, 512)
+    expect(west).toBeCloseTo(-180)
+    expect(east).toBeCloseTo(180)
+    expect(south).toBeCloseTo(-85.0511, 3)
+    expect(north).toBeCloseTo(85.0511, 3)
+  })
+
+  it("is centered on the view and halves with each zoom level", () => {
+    const at12 = viewBounds(-3.7, 40.4, 12, 1600, 900)
+    const at13 = viewBounds(-3.7, 40.4, 13, 1600, 900)
+    expect((at12[0] + at12[2]) / 2).toBeCloseTo(-3.7)
+    expect(at12[2] - at12[0]).toBeCloseTo((at13[2] - at13[0]) * 2)
+    expect(at12[1]).toBeLessThan(40.4)
+    expect(at12[3]).toBeGreaterThan(40.4)
   })
 })

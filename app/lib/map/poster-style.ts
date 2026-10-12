@@ -4,7 +4,7 @@ import type {
   StyleSpecification,
 } from "maplibre-gl"
 
-import { hexToOklch } from "~/lib/color"
+import { hexToOklch, oklchToHex } from "~/lib/color"
 
 import { OPENFREEMAP_ATTRIBUTION } from "./style"
 
@@ -99,6 +99,58 @@ export interface PosterRouteStyle {
   color: string | null
   /** Multiplies the default line width. */
   weight: number
+  /** Opacity of the lines, 0–1. */
+  opacity: number
+  /** Multiplies the glow routes get on dark grounds; 0 turns it off. */
+  glow: number
+}
+
+export const POSTER_ROUTE_DEFAULTS = {
+  weight: 1,
+  opacity: 0.9,
+  glow: 1,
+} satisfies Omit<PosterRouteStyle, "color">
+
+/** How the basemap under the routes looks. */
+export interface PosterMapStyle {
+  /** Multiplies the opacity of streets, motorways and railways. */
+  streets: number
+  /** Scales the lightness of the map's colors: −0.4 darker, 0.4 brighter. */
+  brightness: number
+  /** Multiplies the chroma of the map's colors; 0 is greyscale. */
+  saturation: number
+}
+
+/** Streets a little dimmed, so the routes lead. */
+export const POSTER_MAP_DEFAULTS: PosterMapStyle = {
+  streets: 0.7,
+  brightness: 0,
+  saturation: 1,
+}
+
+/** Palette colors that belong to the basemap, not the routes or the title. */
+const MAP_COLORS = ["land", "water", "park", "roads", "highway"] as const
+
+/**
+ * The palette with the basemap colors made brighter or darker and more or
+ * less vivid. Lightness scales instead of shifting, so near-black grounds
+ * stay near black while the streets on them light up.
+ */
+export function adjustPalette(
+  palette: PosterPalette,
+  { brightness, saturation }: Pick<PosterMapStyle, "brightness" | "saturation">
+): PosterPalette {
+  if (brightness === 0 && saturation === 1) return palette
+  const adjusted = { ...palette }
+  for (const key of MAP_COLORS) {
+    const color = hexToOklch(palette[key])
+    adjusted[key] = oklchToHex({
+      l: Math.min(1, color.l * (1 + brightness)),
+      c: color.c * saturation,
+      h: color.h,
+    })
+  }
+  return adjusted
 }
 
 export const POSTER_TILES_SOURCE = "openmaptiles"
@@ -159,18 +211,23 @@ function road(
 
 /** Routes shrink less than streets when zooming out, so they keep the image. */
 const ROUTE_BASE = 1.4
+/** Route width at BASE_ZOOM: wider than primary roads, so routes lead. */
+const ROUTE_WIDTH = 5.5
 
 /**
  * Basemap and routes for the poster. Unlike the app map, every street class
  * is drawn and visible, there are no labels or borders, and motorways glow.
  * Routes come from the `routes` GeoJSON source, filled in by the poster map.
+ * `streets` multiplies the opacity of every road, to let the routes lead.
  */
 export function createPosterStyle(
   palette: PosterPalette,
-  route: PosterRouteStyle
+  route: PosterRouteStyle,
+  streets = 1
 ): StyleSpecification {
   const dark = isDarkPalette(palette)
   const glow = dark ? 1 : 0
+  const street = (opacity: number) => opacity * streets
 
   const layers: LayerSpecification[] = [
     {
@@ -217,20 +274,20 @@ export function createPosterStyle(
         "line-width": width(2.4),
       },
     },
-    road("road-path", ["path", "track"], palette.roads, 0.3, 1.1),
-    road("road-minor", ["minor", "service"], palette.roads, 0.48, 1.8),
-    road("road-tertiary", ["tertiary"], palette.roads, 0.68, 2.8),
-    road("road-secondary", ["secondary"], palette.roads, 0.8, 3.4),
-    road("road-primary", ["primary", "trunk"], palette.roads, 1, 4.6),
+    road("road-path", ["path", "track"], palette.roads, street(0.3), 1.1),
+    road("road-minor", ["minor", "service"], palette.roads, street(0.48), 1.8),
+    road("road-tertiary", ["tertiary"], palette.roads, street(0.68), 2.8),
+    road("road-secondary", ["secondary"], palette.roads, street(0.8), 3.4),
+    road("road-primary", ["primary", "trunk"], palette.roads, street(1), 4.6),
     road(
       "road-motorway-glow",
       ["motorway"],
       palette.highway,
-      0.3 * glow,
+      street(0.3 * glow),
       26,
       18
     ),
-    road("road-motorway", ["motorway"], palette.highway, 1, 8),
+    road("road-motorway", ["motorway"], palette.highway, street(1), 8),
     {
       id: "rail",
       type: "line",
@@ -243,7 +300,7 @@ export function createPosterStyle(
       ],
       paint: {
         "line-color": palette.roads,
-        "line-opacity": 0.35,
+        "line-opacity": street(0.35),
         "line-width": width(1.6),
       },
     },
@@ -253,7 +310,22 @@ export function createPosterStyle(
     "get",
     "color",
   ]
+  const core = ROUTE_WIDTH * route.weight
   layers.push(
+    {
+      // A soft band of ground under each route keeps streets from running
+      // through it, so the route reads on top of a busy city.
+      id: "routes-halo",
+      type: "line",
+      source: POSTER_ROUTES_SOURCE,
+      layout: { "line-cap": "round", "line-join": "round" },
+      paint: {
+        "line-color": palette.land,
+        "line-opacity": 0.75 * route.opacity,
+        "line-width": width(core + 7, ROUTE_BASE),
+        "line-blur": width(4, ROUTE_BASE),
+      },
+    },
     {
       id: "routes-glow",
       type: "line",
@@ -261,9 +333,9 @@ export function createPosterStyle(
       layout: { "line-cap": "round", "line-join": "round" },
       paint: {
         "line-color": color,
-        "line-opacity": 0.12 * glow,
-        "line-width": width(10 * route.weight, ROUTE_BASE),
-        "line-blur": width(8 * route.weight, ROUTE_BASE),
+        "line-opacity": Math.min(1, 0.16 * glow * route.glow),
+        "line-width": width(core * 3.5, ROUTE_BASE),
+        "line-blur": width(core * 2.5, ROUTE_BASE),
       },
     },
     {
@@ -273,8 +345,8 @@ export function createPosterStyle(
       layout: { "line-cap": "round", "line-join": "round" },
       paint: {
         "line-color": color,
-        "line-opacity": dark ? 0.62 : 0.75,
-        "line-width": width(2.4 * route.weight, ROUTE_BASE),
+        "line-opacity": route.opacity,
+        "line-width": width(core, ROUTE_BASE),
       },
     }
   )

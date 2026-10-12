@@ -2,7 +2,12 @@ const EARTH_RADIUS = 6_371_008.8
 const RAD = Math.PI / 180
 
 export type LngLat = [number, number]
-export type BBox = [minLng: number, minLat: number, maxLng: number, maxLat: number]
+export type BBox = [
+  minLng: number,
+  minLat: number,
+  maxLng: number,
+  maxLat: number,
+]
 
 /**
  * What a flat, north-up map of `width`×`height` pixels shows around a center
